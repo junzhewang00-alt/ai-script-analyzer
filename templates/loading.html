@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+    <h1>AI 分析中...</h1>
+    <p id="progress-text">正在连接分析服务</p>
+</div>
+
+{% if is_demo %}
+<div class="alert alert-warning">
+    ⚠️ 演示模式 — 配置 <code>.env</code> 中的 <code>LLM_API_KEY</code> 获取真实分析
+</div>
+{% endif %}
+
+<div class="progress-bar-wrap">
+    <div class="progress-bar" id="progress-bar"></div>
+</div>
+
+<div class="result-cards" id="result-cards"></div>
+
+<div id="error-msg" style="display:none" class="alert alert-error"></div>
+
+<script>
+const total = {{ total }};
+let completed = 0;
+const isDemo = {{ is_demo|tojson }};
+
+const progressBar = document.getElementById("progress-bar");
+const progressText = document.getElementById("progress-text");
+const resultCards = document.getElementById("result-cards");
+const errorMsg = document.getElementById("error-msg");
+
+const dimNames = ["人物分析", "结构分析", "对白分析", "主题分析", "综合评估", "图片提示词"];
+const dimIcons = ["👤", "📐", "💬", "🎯", "⭐", "🎨"];
+
+function updateProgress() {
+    const pct = Math.round((completed / total) * 100);
+    progressBar.style.width = pct + "%";
+    progressText.textContent = completed + " / " + total + " 项分析完成";
+}
+
+function addResult(label, htmlContent, error) {
+    const card = document.createElement("div");
+    card.className = "result-card";
+    card.id = "card-" + label;
+
+    const idx = dimNames.indexOf(label);
+    const icon = idx >= 0 ? dimIcons[idx] : "📋";
+
+    if (error) {
+        card.innerHTML = '<div class="result-card-header"><span class="result-icon">' + icon + '</span>' + label + '</div><div class="alert alert-error">' + error + '</div>';
+    } else {
+        card.innerHTML = '<div class="result-card-header"><span class="result-icon">' + icon + '</span>' + label + '</div><div class="analysis-content">' + htmlContent + '</div>';
+    }
+
+    resultCards.appendChild(card);
+    card.scrollIntoView({ behavior: "smooth" });
+}
+
+if (!!window.EventSource) {
+    const source = new EventSource("/stream");
+    source.onmessage = function(e) {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === "result") {
+                completed++;
+                addResult(data.label, data.content, data.error);
+                updateProgress();
+            } else if (data.type === "done") {
+                progressText.textContent = "分析完成！";
+                progressBar.style.width = "100%";
+                source.close();
+            } else if (data.error) {
+                errorMsg.textContent = data.error;
+                errorMsg.style.display = "block";
+                source.close();
+            }
+        } catch(err) {
+            console.error("SSE parse error:", err);
+        }
+    };
+    source.onerror = function(e) {
+        if (source.readyState === EventSource.CLOSED) {
+            if (completed === 0) {
+                errorMsg.textContent = "连接中断，请刷新页面重试";
+                errorMsg.style.display = "block";
+            }
+        }
+    };
+} else {
+    errorMsg.textContent = "浏览器不支持实时推送，请使用 Chrome 或 Edge";
+    errorMsg.style.display = "block";
+}
+</script>
+{% endblock %}

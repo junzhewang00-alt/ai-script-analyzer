@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+    <h1>AI 分析中...</h1>
+    <p id="progress-text">正在启动分析</p>
+</div>
+
+{% if is_demo %}
+<div class="alert alert-warning">
+    ⚠️ 演示模式 — 配置 <code>.env</code> 中的 <code>LLM_API_KEY</code> 获取真实分析
+</div>
+{% endif %}
+
+<div class="progress-bar-wrap">
+    <div class="progress-bar" id="progress-bar"></div>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="tab-content" id="tab-content">
+    <div class="tab-panel active" id="panel-empty">
+        <div class="tab-empty">等待分析结果...</div>
+    </div>
+</div>
+
+<div id="error-msg" style="display:none" class="alert alert-error"></div>
+
+<script>
+const jobId = "{{ job_id }}";
+const total = {{ total }};
+let received = 0;
+let lastCount = 0;
+let failCount = 0;
+let currentTab = null;
+
+const dimIcons = {"人物分析": "👤", "结构分析": "📐", "对白分析": "💬", "主题分析": "🎯", "综合评估": "⭐", "图片提示词": "🎨", "视频提示词": "🎬"};
+const dimOrder = ["人物分析", "结构分析", "对白分析", "主题分析", "综合评估", "图片提示词", "视频提示词"];
+
+// Build tab bar
+var tabsEl = document.getElementById("tabs");
+dimOrder.forEach(function(name, i) {
+    var btn = document.createElement("button");
+    btn.className = "tab-btn";
+    btn.id = "tab-btn-" + i;
+    btn.textContent = dimIcons[name] + " " + name;
+    btn.onclick = function() { switchTab(i); };
+    tabsEl.appendChild(btn);
+});
+
+var panels = {};
+
+function updateProgress(count) {
+    var pct = Math.round((count / total) * 100);
+    document.getElementById("progress-bar").style.width = pct + "%";
+    document.getElementById("progress-text").textContent = count + " / " + total + " 项分析完成";
+}
+
+function switchTab(idx) {
+    var name = dimOrder[idx];
+    if (!panels[name]) return;
+
+    document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
+    document.getElementById("tab-btn-" + idx).classList.add("active");
+
+    document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+    panels[name].classList.add("active");
+    currentTab = idx;
+}
+
+function renderResult(label, html, error) {
+    var idx = dimOrder.indexOf(label);
+    var btn = document.getElementById("tab-btn-" + idx);
+    btn.classList.add("completed");
+
+    if (error) {
+        btn.classList.add("has-error");
+    }
+
+    // Create tab panel
+    var panel = document.createElement("div");
+    panel.className = "tab-panel";
+    panel.id = "panel-" + idx;
+
+    if (error) {
+        panel.innerHTML = '<div class="alert alert-error">' + error + '</div>';
+    } else {
+        panel.innerHTML = '<div class="analysis-content">' + html + '</div>';
+    }
+
+    document.getElementById("tab-content").appendChild(panel);
+    panels[label] = panel;
+
+    // Auto-switch to first result
+    if (received === 0) {
+        switchTab(idx);
+    }
+}
+
+function showError(msg) {
+    var el = document.getElementById("error-msg");
+    el.textContent = msg;
+    el.style.display = "block";
+}
+
+function poll() {
+    fetch("/api/job/" + jobId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { showError(data.error); return; }
+
+            var results = data.results || [];
+            var doneCount = 0;
+
+            results.forEach(function(r) {
+                if (!r.pending) {
+                    doneCount++;
+                    if ((r.content || r.error) && !panels[r.label]) {
+                        renderResult(r.label, r.content, r.error);
+                    }
+                }
+            });
+
+            if (doneCount > lastCount) {
+                lastCount = doneCount;
+                updateProgress(doneCount);
+            }
+
+            if (data.done) {
+                updateProgress(total);
+                document.getElementById("progress-text").textContent = "分析完成！";
+                document.getElementById("panel-empty") && document.getElementById("panel-empty").remove();
+                return;
+            }
+
+            failCount = 0;
+            setTimeout(poll, 2000);
+        })
+        .catch(function() {
+            failCount++;
+            if (failCount > 5) {
+                showError("连接失败次数过多，请刷新页面重试");
+            } else {
+                setTimeout(poll, 3000);
+            }
+        });
+}
+
+poll();
+</script>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+    <h1>选择分析维度</h1>
+    <p>点击下方按钮逐个触发分析，或点击"一键全部分析"</p>
+</div>
+
+{% if is_demo %}
+<div class="alert alert-warning">
+    ⚠️ 演示模式 — 配置 <code>.env</code> 中的 <code>LLM_API_KEY</code> 获取真实分析
+</div>
+{% endif %}
+
+<div class="script-info">
+    <span>📝 剧本 {{ char_count }} 字</span>
+    <span class="script-preview">{{ script_preview }}</span>
+</div>
+
+<div class="dim-grid" id="dim-grid">
+    {% for r in results %}
+    <div class="dim-card" id="dim-{{ loop.index0 }}" data-index="{{ loop.index0 }}">
+        <div class="dim-header">
+            <span class="dim-icon">{{ {
+                "人物分析": "👤", "结构分析": "📐", "对白分析": "💬",
+                "主题分析": "🎯", "综合评估": "⭐", "图片提示词": "🎨", "视频提示词": "🎬"
+            }.get(r.label, "📋") }}</span>
+            <span class="dim-label">{{ r.label }}</span>
+            <span class="dim-status idle" id="status-{{ loop.index0 }}">待分析</span>
+        </div>
+        <div class="dim-body" id="body-{{ loop.index0 }}">
+            <div class="dim-placeholder">点击下方按钮开始分析</div>
+        </div>
+        <div class="dim-actions">
+            <button class="btn dim-btn" id="btn-{{ loop.index0 }}" onclick="runDimension({{ loop.index0 }})">
+                ▶ 分析此维度
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="action-bar">
+    <button class="btn btn-primary" id="run-all-btn" onclick="runAll()">
+        ⚡ 一键全部分析
+    </button>
+    <a href="/" class="btn btn-outline">← 返回首页</a>
+</div>
+
+<div id="error-msg" style="display:none" class="alert alert-error"></div>
+
+<script>
+const jobId = "{{ job_id }}";
+const total = {{ total }};
+let runningCount = 0;
+
+function updateDimStatus(index, status) {
+    var el = document.getElementById("status-" + index);
+    var btn = document.getElementById("btn-" + index);
+    el.className = "dim-status " + status;
+
+    var texts = {idle: "待分析", running: "分析中...", done: "✓ 已完成", error: "✗ 失败"};
+    el.textContent = texts[status] || status;
+
+    if (status === "running") {
+        btn.disabled = true;
+        btn.textContent = "⏳ 分析中...";
+        btn.classList.add("dim-btn-running");
+        runningCount++;
+    } else if (status === "done" || status === "error") {
+        btn.style.display = "none";
+        runningCount--;
+        if (status === "error") {
+            btn.style.display = "inline-block";
+            btn.disabled = false;
+            btn.textContent = "↻ 重试";
+            btn.classList.remove("dim-btn-running");
+        }
+    }
+
+    // Enable/disable run-all button
+    var allBtn = document.getElementById("run-all-btn");
+    if (allBtn) {
+        var allDone = document.querySelectorAll(".dim-status.done, .dim-status.error").length === total;
+        var anyRunning = runningCount > 0;
+        allBtn.disabled = anyRunning;
+        if (allDone) allBtn.style.display = "none";
+    }
+}
+
+function runDimension(index) {
+    fetch("/api/job/" + jobId + "/run/" + index, {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                var el = document.getElementById("error-msg");
+                el.textContent = data.error;
+                el.style.display = "block";
+                return;
+            }
+            if (data.ok) {
+                updateDimStatus(index, "running");
+                pollResults();
+            }
+        });
+}
+
+function runAll() {
+    for (var i = 0; i < total; i++) {
+        var status = document.getElementById("status-" + i);
+        if (status.textContent === "待分析") {
+            runDimension(i);
+        }
+    }
+}
+
+function pollResults() {
+    fetch("/api/job/" + jobId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+
+            var hasRunning = false;
+            (data.results || []).forEach(function(r, i) {
+                var body = document.getElementById("body-" + i);
+                var status = document.getElementById("status-" + i);
+
+                if (r.status === "done" && r.content) {
+                    body.innerHTML = '<div class="analysis-content">' + r.content + '</div>';
+                    updateDimStatus(i, "done");
+                } else if (r.status === "error") {
+                    body.innerHTML = '<div class="alert alert-error">' + (r.error || "分析失败") + '</div>';
+                    updateDimStatus(i, "error");
+                } else if (r.status === "running") {
+                    if (status.textContent !== "分析中...") {
+                        updateDimStatus(i, "running");
+                    }
+                    hasRunning = true;
+                }
+            });
+
+            if (hasRunning || runningCount > 0) {
+                setTimeout(pollResults, 2000);
+            }
+        })
+        .catch(function() {
+            setTimeout(pollResults, 3000);
+        });
+}
+</script>
+{% endblock %}

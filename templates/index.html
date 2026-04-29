@@ -2,7 +2,7 @@
 {% block content %}
 <div class="hero">
     <h1>剧本智能分析</h1>
-    <p>粘贴或上传你的剧本文本，AI 将从人物人设、结构节奏、对白情绪、主题共鸣、图片提示词6个维度进行专业分析，帮你找出爽点够不够、钩子牢不牢、反派坏不坏，并一键生成AI绘图提示词。</p>
+    <p>粘贴或上传你的剧本文本，AI 将从人物、结构、对白、主题、图片提示词、视频提示词7个维度进行专业分析。</p>
 </div>
 
 {% if error %}
@@ -12,14 +12,20 @@
 <div class="card">
     <form action="/analyze" method="POST" enctype="multipart/form-data" id="analyze-form">
         <div class="form-group">
-            <label for="script_text">粘贴剧本文本</label>
+            <div class="form-label-row">
+                <label for="script_text">粘贴剧本文本</label>
+                <button type="button" class="btn-link" id="example-btn">📋 试用示例剧本</button>
+            </div>
             <textarea
                 id="script_text"
                 name="script_text"
                 rows="15"
-                placeholder="在此粘贴剧本内容...&#10;&#10;支持纯文本格式，最大30000字符。&#10;超出部分将自动截断。"
+                placeholder="在此粘贴剧本内容...&#10;&#10;支持纯文本格式，最大30000字符。"
             ></textarea>
-            <div class="char-count"><span id="char-count">0</span> / 30000 字符</div>
+            <div class="char-count">
+                <span id="char-count">0</span> / 30000 字符
+                <span id="over-limit-warn" style="display:none">⚠️ 超出限制，超出的部分会被截断</span>
+            </div>
         </div>
 
         <div class="divider"><span>或者</span></div>
@@ -42,5 +48,150 @@
             <span class="btn-loader" style="display:none">分析中...</span>
         </button>
     </form>
+</div>
+
+<!-- 提示词参考面板 -->
+<div class="prompt-ref">
+    <div class="prompt-ref-header" id="prompt-ref-toggle">
+        <span>📖 提示词速查手册</span>
+        <span class="prompt-ref-arrow">▾</span>
+    </div>
+    <div class="prompt-ref-body" id="prompt-ref-body">
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">质量 Quality</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="1080p" data-en="1080p HD">1080p</span>
+                <span class="prompt-tag" data-zh="4K" data-en="4K resolution">4K</span>
+                <span class="prompt-tag" data-zh="8K" data-en="8K ultra HD">8K</span>
+                <span class="prompt-tag" data-zh="超清" data-en="high definition">超清</span>
+                <span class="prompt-tag" data-zh="大师作品" data-en="masterpiece">大师作品</span>
+                <span class="prompt-tag" data-zh="极致画质" data-en="best quality">极致画质</span>
+                <span class="prompt-tag" data-zh="超高分辨率" data-en="ultra high res">超高分辨率</span>
+                <span class="prompt-tag" data-zh="电影级画质" data-en="cinematic quality">电影级画质</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">风格 Style</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="赛璐璐风格" data-en="cel shaded style">赛璐璐风格</span>
+                <span class="prompt-tag" data-zh="写实风格" data-en="photorealistic">写实风格</span>
+                <span class="prompt-tag" data-zh="二次元" data-en="anime style">二次元</span>
+                <span class="prompt-tag" data-zh="油画风" data-en="oil painting style">油画风</span>
+                <span class="prompt-tag" data-zh="水彩风" data-en="watercolor style">水彩风</span>
+                <span class="prompt-tag" data-zh="水墨风" data-en="ink wash painting">水墨风</span>
+                <span class="prompt-tag" data-zh="线稿" data-en="line art">线稿</span>
+                <span class="prompt-tag" data-zh="厚涂" data-en="impasto style">厚涂</span>
+                <span class="prompt-tag" data-zh="扁平化" data-en="flat illustration">扁平化</span>
+                <span class="prompt-tag" data-zh="低多边形" data-en="low poly style">低多边形</span>
+                <span class="prompt-tag" data-zh="像素风" data-en="pixel art">像素风</span>
+                <span class="prompt-tag" data-zh="剪纸风" data-en="paper cut style">剪纸风</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">画面效果 Effects</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="动态模糊" data-en="motion blur">动态模糊</span>
+                <span class="prompt-tag" data-zh="景深" data-en="depth of field">景深</span>
+                <span class="prompt-tag" data-zh="光晕" data-en="lens flare">光晕</span>
+                <span class="prompt-tag" data-zh="粒子特效" data-en="particle effects">粒子特效</span>
+                <span class="prompt-tag" data-zh="辉光" data-en="glow effect">辉光</span>
+                <span class="prompt-tag" data-zh="雾气" data-en="fog atmosphere">雾气</span>
+                <span class="prompt-tag" data-zh="电影颗粒" data-en="film grain">电影颗粒</span>
+                <span class="prompt-tag" data-zh="柔焦" data-en="soft focus">柔焦</span>
+                <span class="prompt-tag" data-zh="色散" data-en="chromatic aberration">色散</span>
+                <span class="prompt-tag" data-zh="虚化背景" data-en="bokeh background">虚化背景</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">容貌 Appearance</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="长发" data-en="long hair">长发</span>
+                <span class="prompt-tag" data-zh="短发" data-en="short hair">短发</span>
+                <span class="prompt-tag" data-zh="双马尾" data-en="twin tails">双马尾</span>
+                <span class="prompt-tag" data-zh="眼镜" data-en="glasses">眼镜</span>
+                <span class="prompt-tag" data-zh="泪痣" data-en="beauty mark">泪痣</span>
+                <span class="prompt-tag" data-zh="雀斑" data-en="freckles">雀斑</span>
+                <span class="prompt-tag" data-zh="精致五官" data-en="delicate features">精致五官</span>
+                <span class="prompt-tag" data-zh="冷白皮" data-en="pale skin">冷白皮</span>
+                <span class="prompt-tag" data-zh="红唇" data-en="red lips">红唇</span>
+                <span class="prompt-tag" data-zh="湿发" data-en="wet hair">湿发</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">构图 Composition</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="三视图" data-en="three-view drawing">三视图</span>
+                <span class="prompt-tag" data-zh="全身像" data-en="full body shot">全身像</span>
+                <span class="prompt-tag" data-zh="半身像" data-en="half body shot">半身像</span>
+                <span class="prompt-tag" data-zh="肖像特写" data-en="portrait close-up">肖像特写</span>
+                <span class="prompt-tag" data-zh="大远景" data-en="wide shot">大远景</span>
+                <span class="prompt-tag" data-zh="居中构图" data-en="center composition">居中构图</span>
+                <span class="prompt-tag" data-zh="三分法" data-en="rule of thirds">三分法</span>
+                <span class="prompt-tag" data-zh="对称构图" data-en="symmetrical composition">对称构图</span>
+                <span class="prompt-tag" data-zh="对角线构图" data-en="diagonal composition">对角线构图</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">光线 Lighting</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="自然光" data-en="natural lighting">自然光</span>
+                <span class="prompt-tag" data-zh="逆光" data-en="backlit">逆光</span>
+                <span class="prompt-tag" data-zh="侧光" data-en="side lighting">侧光</span>
+                <span class="prompt-tag" data-zh="顶光" data-en="top lighting">顶光</span>
+                <span class="prompt-tag" data-zh="霓虹灯光" data-en="neon lighting">霓虹灯光</span>
+                <span class="prompt-tag" data-zh="黄昏光" data-en="golden hour light">黄昏光</span>
+                <span class="prompt-tag" data-zh="柔光" data-en="soft diffused light">柔光</span>
+                <span class="prompt-tag" data-zh="硬光" data-en="hard light">硬光</span>
+                <span class="prompt-tag" data-zh="烛光" data-en="candlelight">烛光</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">视角 Camera</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="俯视" data-en="bird's eye view">俯视</span>
+                <span class="prompt-tag" data-zh="仰视" data-en="worm's eye view">仰视</span>
+                <span class="prompt-tag" data-zh="平视" data-en="eye level shot">平视</span>
+                <span class="prompt-tag" data-zh="第一人称" data-en="first person POV">第一人称</span>
+                <span class="prompt-tag" data-zh="鱼眼镜头" data-en="fisheye lens">鱼眼镜头</span>
+                <span class="prompt-tag" data-zh="广角" data-en="wide angle">广角</span>
+                <span class="prompt-tag" data-zh="特写微距" data-en="macro close-up">特写微距</span>
+                <span class="prompt-tag" data-zh="倾斜镜头" data-en="dutch angle">倾斜镜头</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">色调 Color</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="暖色调" data-en="warm color tone">暖色调</span>
+                <span class="prompt-tag" data-zh="冷色调" data-en="cool color tone">冷色调</span>
+                <span class="prompt-tag" data-zh="黑白" data-en="black and white">黑白</span>
+                <span class="prompt-tag" data-zh="低饱和" data-en="desaturated">低饱和</span>
+                <span class="prompt-tag" data-zh="赛博朋克" data-en="cyberpunk color">赛博朋克</span>
+                <span class="prompt-tag" data-zh="胶片色" data-en="film color grading">胶片色</span>
+                <span class="prompt-tag" data-zh="莫兰迪色" data-en="Morandi palette">莫兰迪色</span>
+                <span class="prompt-tag" data-zh="糖果色" data-en="pastel candy color">糖果色</span>
+            </div>
+        </div>
+
+        <div class="prompt-cat">
+            <div class="prompt-cat-title">分辨率 Aspect Ratio</div>
+            <div class="prompt-tags">
+                <span class="prompt-tag" data-zh="16:9" data-en="16:9 widescreen">16:9</span>
+                <span class="prompt-tag" data-zh="9:16" data-en="9:16 vertical">9:16</span>
+                <span class="prompt-tag" data-zh="1:1" data-en="1:1 square">1:1</span>
+                <span class="prompt-tag" data-zh="2:3" data-en="2:3 portrait">2:3</span>
+                <span class="prompt-tag" data-zh="21:9" data-en="21:9 ultrawide">21:9</span>
+                <span class="prompt-tag" data-zh="4:3" data-en="4:3 classic">4:3</span>
+            </div>
+        </div>
+
+    </div>
 </div>
 {% endblock %}

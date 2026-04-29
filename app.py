@@ -1,10 +1,12 @@
 import os
+import json
 import tempfile
+import threading
+import uuid
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import markdown
-from flask import Flask, render_template, request, session, jsonify
+from flask import Flask, render_template, request, session, jsonify, redirect, url_for
 from dotenv import load_dotenv
 
 from analyzer.parser import parse_text, parse_file
@@ -18,6 +20,10 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-in-product
 
 UPLOAD_FOLDER = tempfile.gettempdir()
 
+# 内存任务存储
+_jobs: dict = {}
+_lock = threading.Lock()
+
 
 @app.route("/")
 def index():
@@ -26,7 +32,6 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    # 1. Get script text
     text_input = request.form.get("script_text", "").strip()
     uploaded_file = request.files.get("script_file")
 
@@ -49,60 +54,122 @@ def analyze():
     except Exception as e:
         return render_template("index.html", error=f"文件解析失败: {e}")
 
-    # 2. Run analysis
-    tasks = build_analysis_tasks(script_text)
     config_ok = bool(os.getenv("LLM_API_KEY"))
+    tasks = build_analysis_tasks(script_text)
 
-    if config_ok:
-        results = _run_analysis(tasks)
-    else:
-        # Demo mode — show prompts without calling LLM
-        results = _demo_analysis(tasks)
+    job_id = uuid.uuid4().hex[:12]
 
-    # Markdown → HTML
-    for r in results:
-        if r["content"] and not r["error"]:
-            r["content"] = _render_md(r["content"])
+    with _lock:
+        _jobs[job_id] = {
+            "script_text": script_text,
+            "tasks": tasks,
+            "results": [
+                {"label": t["label"], "content": "", "error": None, "status": "idle"}
+                for t in tasks
+            ],
+            "is_demo": not config_ok,
+            "total": len(tasks),
+            "script_preview": script_text[:200].replace("\n", " ") + ("..." if len(script_text) > 200 else ""),
+            "char_count": len(script_text),
+        }
 
-    return render_template("result.html", results=results, is_demo=not config_ok)
-
-
-def _run_analysis(tasks: list[dict]) -> list[dict]:
-    """Run all analysis tasks concurrently."""
-    results = []
-
-    def _run_one(task):
-        full_prompt = f"{task['instruction']}\n\n{task['user']}"
-        try:
-            output = call_llm(full_prompt, system_prompt=task["system"])
-            return {"label": task["label"], "content": output, "error": None}
-        except Exception as e:
-            return {"label": task["label"], "content": "", "error": str(e)}
-
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {executor.submit(_run_one, t): t for t in tasks}
-        # Preserve order
-        ordered = [None] * len(tasks)
-        for future in as_completed(futures):
-            task = futures[future]
-            idx = tasks.index(task)
-            ordered[idx] = future.result()
-
-        results = [r for r in ordered if r is not None]
-
-    return results
+    return redirect(url_for("manual_analyze", job_id=job_id), code=303)
 
 
-def _demo_analysis(tasks: list[dict]) -> list[dict]:
-    """Return prompt preview when no LLM configured."""
-    results = []
-    for t in tasks:
-        content = f"**[演示模式 — 请配置 .env 中的 LLM_API_KEY 以获取真实分析]**\n\n"
-        content += f"**System Prompt:** {t['system'][:100]}...\n\n"
-        content += f"**指令:** {t['instruction'][:200]}...\n\n"
-        content += f"**剧本长度:** {len(t['user'])} 字符"
-        results.append({"label": t["label"], "content": content, "error": None})
-    return results
+@app.route("/analyze/<job_id>")
+def manual_analyze(job_id):
+    with _lock:
+        job = _jobs.get(job_id)
+
+    if job is None:
+        return render_template("index.html", error="任务不存在或已过期，请重新提交剧本")
+
+    return render_template("manual.html",
+        job_id=job_id,
+        is_demo=job["is_demo"],
+        results=job["results"],
+        script_preview=job.get("script_preview", ""),
+        char_count=job.get("char_count", 0),
+    )
+
+
+@app.route("/api/job/<job_id>")
+def job_status(job_id):
+    with _lock:
+        job = _jobs.get(job_id)
+
+    if job is None:
+        return jsonify({"error": "任务不存在或已过期"}), 404
+
+    return jsonify({
+        "results": job["results"],
+        "is_demo": job["is_demo"],
+        "total": job["total"],
+        "script_preview": job.get("script_preview", ""),
+        "char_count": job.get("char_count", 0),
+    })
+
+
+@app.route("/api/job/<job_id>/run/<int:index>", methods=["POST"])
+def run_single_dimension(job_id, index):
+    with _lock:
+        job = _jobs.get(job_id)
+
+    if job is None:
+        return jsonify({"error": "任务不存在"}), 404
+
+    if index < 0 or index >= len(job["tasks"]):
+        return jsonify({"error": "无效的分析维度"}), 400
+
+    with _lock:
+        if job["results"][index]["status"] == "running":
+            return jsonify({"error": "该维度正在分析中"}), 409
+        if job["results"][index]["status"] == "done":
+            return jsonify({"error": "该维度已完成"}), 409
+        job["results"][index]["status"] = "running"
+
+    task = job["tasks"][index]
+
+    def _run_one():
+        if job["is_demo"]:
+            import time
+            time.sleep(0.5)
+            demo = (
+                f"**[演示模式]**\n\n"
+                f"**System Prompt:** {task['system'][:100]}...\n\n"
+                f"**指令:** {task['instruction'][:200]}...\n\n"
+                f"**剧本长度:** {len(task['user'])} 字符"
+            )
+            with _lock:
+                job["results"][index] = {
+                    "label": task["label"],
+                    "content": _render_md(demo),
+                    "error": None,
+                    "status": "done",
+                }
+        else:
+            full_prompt = f"{task['instruction']}\n\n{task['user']}"
+            try:
+                output = call_llm(full_prompt, system_prompt=task["system"])
+                with _lock:
+                    job["results"][index] = {
+                        "label": task["label"],
+                        "content": _render_md(output),
+                        "error": None,
+                        "status": "done",
+                    }
+            except Exception as e:
+                with _lock:
+                    job["results"][index] = {
+                        "label": task["label"],
+                        "content": "",
+                        "error": str(e),
+                        "status": "error",
+                    }
+
+    threading.Thread(target=_run_one, daemon=True).start()
+
+    return jsonify({"ok": True})
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -110,7 +177,6 @@ def api_analyze():
     data = request.get_json()
     if not data or "script_text" not in data:
         return jsonify({"error": "缺少 script_text 字段"}), 400
-
     try:
         script_text = parse_text(data["script_text"])
     except ValueError as e:
@@ -120,21 +186,22 @@ def api_analyze():
         return jsonify({"error": "请先配置 LLM_API_KEY"}), 500
 
     tasks = build_analysis_tasks(script_text)
-    results = _run_analysis(tasks)
-    for r in results:
-        if r["content"] and not r["error"]:
-            r["content"] = _render_md(r["content"])
+    results = []
+    for task in tasks:
+        full_prompt = f"{task['instruction']}\n\n{task['user']}"
+        try:
+            output = call_llm(full_prompt, system_prompt=task["system"])
+            results.append({"label": task["label"], "content": _render_md(output), "error": None})
+        except Exception as e:
+            results.append({"label": task["label"], "content": "", "error": str(e)})
     return jsonify({"results": results})
 
 
 def _render_md(text: str) -> str:
-    """Convert Markdown to HTML for display."""
     return markdown.markdown(
         text,
         extensions=["extra", "codehilite", "nl2br"],
-        extension_configs={
-            "codehilite": {"guess_lang": False},
-        },
+        extension_configs={"codehilite": {"guess_lang": False}},
     )
 
 
@@ -146,11 +213,10 @@ if __name__ == "__main__":
     print("  http://localhost:5000")
     print("=" * 50)
 
-    # 生产模式用 waitress，开发模式用 Flask dev server
     if "--prod" in sys.argv:
         from waitress import serve
         port = int(os.getenv("PORT", 5000))
         print(f"  生产模式 (waitress) → http://0.0.0.0:{port}")
         serve(app, host="0.0.0.0", port=port)
     else:
-        app.run(debug=True)
+        app.run(debug=True, threaded=True)
