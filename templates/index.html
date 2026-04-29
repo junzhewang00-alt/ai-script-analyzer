@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+    <h1>剧本智能分析</h1>
+    <p>粘贴或上传你的剧本文本，AI 将从人物人设、结构节奏、对白情绪、主题共鸣、图片提示词6个维度进行专业分析，帮你找出爽点够不够、钩子牢不牢、反派坏不坏，并一键生成AI绘图提示词。</p>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+    <form action="/analyze" method="POST" enctype="multipart/form-data" id="analyze-form">
+        <div class="form-group">
+            <label for="script_text">粘贴剧本文本</label>
+            <textarea
+                id="script_text"
+                name="script_text"
+                rows="15"
+                placeholder="在此粘贴剧本内容...&#10;&#10;支持纯文本格式，最大30000字符。&#10;超出部分将自动截断。"
+            ></textarea>
+            <div class="char-count"><span id="char-count">0</span> / 30000 字符</div>
+        </div>
+
+        <div class="divider"><span>或者</span></div>
+
+        <div class="form-group">
+            <label for="script_file">上传剧本文件</label>
+            <div class="file-upload" id="file-upload">
+                <input type="file" id="script_file" name="script_file" accept=".txt,.pdf,.fdx">
+                <div class="file-upload-label">
+                    <span class="file-icon">📁</span>
+                    <span>点击选择文件或拖拽到此处</span>
+                    <span class="file-hint">支持 .txt / .pdf / .fdx</span>
+                </div>
+                <div class="file-name" id="file-name"></div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+            <span class="btn-text">开始分析</span>
+            <span class="btn-loader" style="display:none">分析中...</span>
+        </button>
+    </form>
+</div>
+{% endblock %}
