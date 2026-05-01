@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard">
+    <div class="dash-header">
+        <h2>用户面板</h2>
+        <p>{{ current_user.display_name }}</p>
+    </div>
+
+    <div class="dash-cards">
+        <div class="dash-card dash-card-credits">
+            <div class="dash-card-icon">💰</div>
+            <div class="dash-card-val">{{ current_user.credits }}</div>
+            <div class="dash-card-label">当前积分</div>
+        </div>
+        <div class="dash-card dash-card-signin" id="signin-card">
+            <div class="dash-card-icon">📅</div>
+            <div class="dash-card-val" id="signin-status">
+                {% if current_user.last_signin_date and current_user.last_signin_date == today %}
+                今日已签到
+                {% else %}
+                未签到
+                {% endif %}
+            </div>
+            <div class="dash-card-label">
+                <button class="btn btn-sm" id="signin-btn" onclick="dailySignin()"
+                        {% if current_user.last_signin_date and current_user.last_signin_date == today %}disabled{% endif %}>
+                    +{{ signin_bonus }} 签到
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dash-section">
+        <h3>消费记录</h3>
+        {% if logs %}
+        <div class="log-table-wrap">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>说明</th>
+                        <th>变动</th>
+                        <th>余额</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in logs %}
+                    <tr>
+                        <td>{{ l.created_at.strftime('%m-%d %H:%M') }}</td>
+                        <td>{{ l.description or l.type }}</td>
+                        <td class="{{ 'credit-plus' if l.amount > 0 else 'credit-minus' }}">
+                            {{ '+' if l.amount > 0 else '' }}{{ l.amount }}
+                        </td>
+                        <td>{{ l.balance_after }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="dash-empty">暂无记录</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+var SIGNIN_BONUS = {{ signin_bonus }};
+
+function dailySignin() {
+    var btn = document.getElementById("signin-btn");
+    btn.disabled = true;
+    btn.textContent = "签到中...";
+    fetch("/auth/signin", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) {
+                document.getElementById("signin-status").textContent = "今日已签到";
+                btn.textContent = "已签到 ✓";
+                document.querySelector(".dash-card-credits .dash-card-val").textContent = d.credits;
+            } else {
+                btn.disabled = true;
+                btn.textContent = "已签到";
+                alert(d.error || "签到失败");
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = "+" + SIGNIN_BONUS + " 签到";
+        });
+}
+</script>
+{% endblock %}

@@ -5,3 +5,5 @@ PyPDF2>=3.0
 markdown>=3.5
 waitress>=3.0
 gunicorn>=22.0
+flask-login>=0.6
+flask-sqlalchemy>=3.1

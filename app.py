@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 
 import markdown
-from flask import Flask, render_template, request, session, jsonify, redirect, url_for
+from flask import Flask, render_template, request, session, jsonify, redirect, url_for, flash
+from flask_login import LoginManager, login_required, current_user
 from dotenv import load_dotenv
 
 from analyzer.parser import parse_text, parse_file
@@ -20,8 +21,27 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB upload limit
 
-UPLOAD_FOLDER = tempfile.gettempdir()
 BASE_DIR = Path(__file__).parent
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'instance' / 'app.db'}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+(BASE_DIR / "instance").mkdir(exist_ok=True)
+
+from models import db, User, CreditLog, get_analysis_cost, CREDIT_COST
+from auth import auth_bp
+
+db.init_app(app)
+app.register_blueprint(auth_bp)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "auth.login"
+login_manager.login_message = "请先登录后再使用此功能"
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+UPLOAD_FOLDER = tempfile.gettempdir()
 JOBS_DIR = BASE_DIR / ".jobs"
 JOBS_DIR.mkdir(exist_ok=True)
 
@@ -128,6 +148,7 @@ def prompts_studio():
 
 
 @app.route("/analyze", methods=["POST"])
+@login_required
 def analyze():
     text_input = request.form.get("script_text", "").strip()
     uploaded_file = request.files.get("script_file")
@@ -150,6 +171,15 @@ def analyze():
         return render_template("index.html", error=str(e))
     except Exception as e:
         return render_template("index.html", error=f"文件解析失败: {e}")
+
+    # 积分检查
+    cost = get_analysis_cost(len(script_text))
+    if current_user.credits < cost:
+        return render_template("index.html",
+            error=f"积分不足！本次分析需要 {cost} 积分，当前余额 {current_user.credits} 积分。"
+                  f'<a href="/dashboard">去充值</a>')
+
+    _deduct_credits(cost, f"剧本分析 ({len(script_text)}字)")
 
     sid = _get_sid()
     sc = _api_configs.get(sid, {})
@@ -178,6 +208,7 @@ def analyze():
 
 
 @app.route("/analyze/<job_id>")
+@login_required
 def manual_analyze(job_id):
     with _lock:
         job = _jobs.get(job_id)
@@ -196,6 +227,7 @@ def manual_analyze(job_id):
 
 
 @app.route("/api/job/<job_id>")
+@login_required
 def job_status(job_id):
     with _lock:
         job = _jobs.get(job_id)
@@ -250,7 +282,11 @@ def api_config_save():
 
 
 @app.route("/api/job/<job_id>/run/<int:index>", methods=["POST"])
+@login_required
 def run_single_dimension(job_id, index):
+    # 单个维度积分检查
+    if current_user.credits < CREDIT_COST["single_dimension"]:
+        return jsonify({"error": f"积分不足，单个维度分析需要 {CREDIT_COST['single_dimension']} 积分"}), 402
     with _lock:
         job = _jobs.get(job_id)
 
@@ -315,6 +351,7 @@ def run_single_dimension(job_id, index):
                             "status": "done",
                         }
                         _save_job(job_id)
+                    _deduct_credits(CREDIT_COST["single_dimension"], f"单维度分析: {task['label']}")
                 except RuntimeError as e:
                     # 用户取消
                     with _lock:
@@ -343,6 +380,7 @@ def run_single_dimension(job_id, index):
 
 
 @app.route("/api/job/<job_id>/cancel/<int:index>", methods=["POST"])
+@login_required
 def cancel_dimension(job_id, index):
     with _lock:
         job = _jobs.get(job_id)
@@ -369,7 +407,11 @@ def cancel_dimension(job_id, index):
 
 
 @app.route("/api/job/<job_id>/overview", methods=["POST"])
+@login_required
 def run_overview(job_id):
+    if current_user.credits < CREDIT_COST["overview"]:
+        return jsonify({"error": f"积分不足，概览生成需要 {CREDIT_COST['overview']} 积分"}), 402
+
     with _lock:
         job = _jobs.get(job_id)
 
@@ -423,6 +465,7 @@ def run_overview(job_id):
                     with _lock:
                         job["overview"] = {"content": _render_md(output), "error": None, "status": "done"}
                         _save_job(job_id)
+                    _deduct_credits(CREDIT_COST["overview"], "生成分析概览")
                 except RuntimeError:
                     with _lock:
                         job["overview"] = {"content": "", "error": None, "status": "idle"}
@@ -439,6 +482,7 @@ def run_overview(job_id):
 
 
 @app.route("/api/analyze", methods=["POST"])
+@login_required
 def api_analyze():
     data = request.get_json()
     if not data or "script_text" not in data:
@@ -471,6 +515,7 @@ def api_analyze():
 
 
 @app.route("/api/translate", methods=["POST"])
+@login_required
 def api_translate():
     data = request.get_json()
     if not data or "text" not in data:
@@ -479,6 +524,9 @@ def api_translate():
     text = data["text"].strip()
     if not text:
         return jsonify({"error": "文本为空"}), 400
+
+    if current_user.credits < CREDIT_COST["translate"]:
+        return jsonify({"error": f"积分不足，翻译需要 {CREDIT_COST['translate']} 积分"}), 402
 
     sid = _get_sid()
     sc = _api_configs.get(sid, {})
@@ -493,14 +541,44 @@ def api_translate():
             api_key=sc.get("api_key") or None,
             model=sc.get("model") or None,
         )
+        _deduct_credits(CREDIT_COST["translate"], "提示词翻译")
         return jsonify({"translated": output.strip()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    from datetime import date
+    from models import DAILY_SIGNIN
+    logs = (CreditLog.query
+            .filter_by(user_id=current_user.id)
+            .order_by(CreditLog.created_at.desc())
+            .limit(50)
+            .all())
+    return render_template("dashboard.html",
+        logs=logs,
+        signin_bonus=DAILY_SIGNIN,
+        today=date.today())
+
+
 @app.errorhandler(413)
 def too_large(e):
     return render_template("index.html", error="文件过大，上传限制为 10MB，请压缩或拆分后重试"), 413
+
+
+def _deduct_credits(amount: int, description: str):
+    current_user.credits -= amount
+    log = CreditLog(
+        user_id=current_user.id,
+        type="consume",
+        amount=-amount,
+        balance_after=current_user.credits,
+        description=description,
+    )
+    db.session.add(log)
+    db.session.commit()
 
 
 def _render_md(text: str) -> str:
@@ -513,6 +591,9 @@ def _render_md(text: str) -> str:
 
 if __name__ == "__main__":
     import sys
+
+    with app.app_context():
+        db.create_all()
 
     print("=" * 50)
     print("  AI 短剧剧本分析器")

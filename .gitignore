@@ -11,3 +11,5 @@ gh.exe
 example_analysis.json
 example_result.html
 .jobs/
+instance/
+*.db

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2>登录</h2>
+            <p>欢迎回到 AI 短剧剧本分析器</p>
+        </div>
+        <form method="POST" action="{{ url_for('auth.login') }}">
+            <div class="form-group">
+                <label for="email">邮箱</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" required placeholder="至少6位">
+            </div>
+            <div class="form-group-inline">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="remember" value="1"> 记住我
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">登录</button>
+        </form>
+        <div class="auth-footer">
+            还没有账号？<a href="{{ url_for('auth.register') }}">立即注册</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

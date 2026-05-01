@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2>注册</h2>
+            <p>注册即送 30 积分，免费体验 3 次分析</p>
+        </div>
+        <form method="POST" action="{{ url_for('auth.register') }}">
+            <div class="form-group">
+                <label for="email">邮箱</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="nickname">昵称 <span class="field-optional">选填</span></label>
+                <input type="text" id="nickname" name="nickname" placeholder="如何称呼你？">
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" required placeholder="至少6位">
+            </div>
+            <div class="form-group">
+                <label for="confirm">确认密码</label>
+                <input type="password" id="confirm" name="confirm" placeholder="再次输入密码">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">注册</button>
+        </form>
+        <div class="auth-footer">
+            已有账号？<a href="{{ url_for('auth.login') }}">登录</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    var pw = document.getElementById('password').value;
+    var cf = document.getElementById('confirm').value;
+    if (pw !== cf) {
+        e.preventDefault();
+        alert('两次密码输入不一致');
+    }
+});
+</script>
+{% endblock %}
