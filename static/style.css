@@ -2244,3 +2244,184 @@ html.light-theme ::-webkit-scrollbar-thumb {
     }
 }
 
+/* ============================================================
+   RECHARGE PAGE
+   ============================================================ */
+
+.recharge-page {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+.recharge-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.recharge-header h2 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.recharge-header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.recharge-header strong {
+    color: var(--accent);
+    font-size: 1.2rem;
+}
+
+.recharge-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+    transition: opacity 0.3s;
+}
+
+.recharge-card {
+    cursor: pointer;
+}
+
+.recharge-card input {
+    display: none;
+}
+
+.recharge-card-inner {
+    background: var(--card-bg);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 16px;
+    text-align: center;
+    transition: all 0.25s;
+}
+
+.recharge-card input:checked + .recharge-card-inner {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    transform: translateY(-2px);
+}
+
+.recharge-amount {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.recharge-amount span {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+}
+
+.recharge-credits {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 6px 0 4px;
+}
+
+.recharge-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.recharge-bonus {
+    font-size: 0.75rem;
+    color: #f59e0b;
+    margin-top: 2px;
+}
+
+.recharge-action {
+    text-align: center;
+}
+
+.btn-lg {
+    padding: 14px 48px;
+    font-size: 1.1rem;
+    border-radius: 12px;
+}
+
+.pay-qrcode-wrap {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.pay-qrcode-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    width: 340px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.pay-qrcode-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pay-qrcode-body {
+    padding: 28px 20px 24px;
+    text-align: center;
+}
+
+.pay-qrcode-body img {
+    border-radius: 10px;
+    transition: opacity 0.3s;
+}
+
+.pay-amount-text {
+    margin-top: 14px;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.pay-amount-text strong {
+    color: var(--accent);
+    font-size: 1.3rem;
+}
+
+.pay-hint {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+
+.pay-status {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+
+.pay-status-icon {
+    font-size: 1.2rem;
+}
+
+@media (max-width: 480px) {
+    .recharge-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .pay-qrcode-card {
+        width: 90vw;
+        max-width: 340px;
+    }
+}
+

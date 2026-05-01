@@ -55,3 +55,22 @@ class CreditLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref=db.backref("credit_logs", lazy="dynamic"))
+
+
+class RechargeOrder(db.Model):
+    __tablename__ = "recharge_order"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    out_trade_no = db.Column(db.String(32), unique=True, nullable=False)
+    payjs_order_id = db.Column(db.String(32))
+    amount_fen = db.Column(db.Integer, nullable=False)
+    amount_yuan = db.Column(db.Integer, nullable=False)
+    credits = db.Column(db.Integer, nullable=False)  # 获得的积分数
+    body = db.Column(db.String(64))
+    status = db.Column(db.String(16), default="pending")  # pending / paid / failed
+    payjs_raw = db.Column(db.Text)  # 回调原始数据 JSON
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    paid_at = db.Column(db.DateTime)
+
+    user = db.relationship("User", backref=db.backref("recharge_orders", lazy="dynamic"))

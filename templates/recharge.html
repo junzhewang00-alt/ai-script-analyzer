@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="recharge-page">
+    <div class="recharge-header">
+        <h2>积分充值</h2>
+        <p>当前积分: <strong id="current-credits">{{ current_user.credits }}</strong></p>
+    </div>
+
+    {% if not configured %}
+    <div class="flash flash-error" style="max-width:500px;margin:0 auto 24px;">
+        支付接口未配置，请在 <code>.env</code> 中设置 <code>PAYJS_MCHID</code>、<code>PAYJS_SECRET</code>、<code>PAYJS_NOTIFY_URL</code>
+    </div>
+    {% endif %}
+
+    <div class="recharge-grid" id="recharge-grid">
+        {% for pkg in packages %}
+        <label class="recharge-card" data-amount="{{ pkg.amount_yuan }}">
+            <input type="radio" name="amount" value="{{ pkg.amount_yuan }}" {% if loop.first %}checked{% endif %}>
+            <div class="recharge-card-inner">
+                <div class="recharge-amount">{{ pkg.amount_yuan }} <span>元</span></div>
+                <div class="recharge-credits">{{ pkg.credits }} 积分</div>
+                <div class="recharge-label">{{ pkg.label }}</div>
+                {% if pkg.bonus %}
+                <div class="recharge-bonus">{{ pkg.bonus }}</div>
+                {% endif %}
+            </div>
+        </label>
+        {% endfor %}
+    </div>
+
+    <div class="recharge-action" id="recharge-action">
+        <button class="btn btn-primary btn-lg" id="btn-create" onclick="createRechargeOrder()">
+            💳 生成支付码
+        </button>
+    </div>
+
+    <div class="pay-qrcode-wrap" id="pay-qrcode-wrap" style="display:none;">
+        <div class="pay-qrcode-card">
+            <div class="pay-qrcode-header">
+                <span>微信扫码支付</span>
+                <button class="modal-close" onclick="closePayQR()">&times;</button>
+            </div>
+            <div class="pay-qrcode-body">
+                <img id="pay-qrcode-img" src="" alt="支付二维码" style="width:200px;height:200px;">
+                <p class="pay-amount-text">支付 <strong id="pay-amount-text"></strong> 元</p>
+                <p class="pay-hint">请使用微信扫一扫</p>
+                <div class="pay-status" id="pay-status">
+                    <span class="pay-status-icon">⏳</span>
+                    <span id="pay-status-text">等待支付...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var currentOrderNo = null;
+var pollTimer = null;
+
+function createRechargeOrder() {
+    var selected = document.querySelector('input[name="amount"]:checked');
+    if (!selected) return;
+
+    var btn = document.getElementById("btn-create");
+    btn.disabled = true;
+    btn.textContent = "创建中...";
+
+    fetch("/pay/create", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({amount_yuan: parseInt(selected.value)})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        btn.disabled = false;
+        btn.textContent = "💳 生成支付码";
+        if (d.ok) {
+            currentOrderNo = d.out_trade_no;
+            document.getElementById("pay-qrcode-img").src = d.qrcode;
+            document.getElementById("pay-amount-text").textContent = d.amount_yuan;
+            document.getElementById("pay-qrcode-wrap").style.display = "flex";
+            document.getElementById("recharge-grid").style.opacity = "0.5";
+            document.getElementById("recharge-action").style.display = "none";
+            document.getElementById("pay-status-text").textContent = "等待支付...";
+            document.querySelector(".pay-status-icon").textContent = "⏳";
+            startPolling(d.out_trade_no);
+        } else {
+            alert(d.error || "创建订单失败");
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = "💳 生成支付码";
+        alert("网络错误，请重试");
+    });
+}
+
+function startPolling(outTradeNo) {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function() {
+        fetch("/pay/status/" + outTradeNo)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.status === "paid") {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    document.getElementById("pay-status-text").textContent = "支付成功！积分已到账";
+                    document.querySelector(".pay-status-icon").textContent = "✅";
+                    document.getElementById("pay-qrcode-img").style.opacity = "0.5";
+                    // 更新顶栏积分
+                    var headerCredits = document.getElementById("header-credits");
+                    if (headerCredits) headerCredits.textContent = d.credits;
+                    // 延迟刷新
+                    setTimeout(function() {
+                        location.reload();
+                    }, 2000);
+                } else if (d.status === "failed") {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    document.getElementById("pay-status-text").textContent = "订单失败，请重试";
+                    document.querySelector(".pay-status-icon").textContent = "❌";
+                }
+            });
+    }, 3000);
+}
+
+function closePayQR() {
+    document.getElementById("pay-qrcode-wrap").style.display = "none";
+    document.getElementById("recharge-grid").style.opacity = "1";
+    document.getElementById("recharge-action").style.display = "block";
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+    currentOrderNo = null;
+}
+</script>
+{% endblock %}

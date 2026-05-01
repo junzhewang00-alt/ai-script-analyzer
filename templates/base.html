@@ -26,6 +26,7 @@
                     🌙
                 </button>
                 {% if current_user.is_authenticated %}
+                <a href="/pay/recharge" class="btn btn-primary btn-sm" title="充值积分">+ 充值</a>
                 <a href="/dashboard" class="credits-badge" title="查看积分记录">
                     💰 <span id="header-credits">{{ current_user.credits }}</span>
                 </a>

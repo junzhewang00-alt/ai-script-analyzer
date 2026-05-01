@@ -28,9 +28,11 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 from models import db, User, CreditLog, get_analysis_cost, CREDIT_COST
 from auth import auth_bp
+from pay_bp import pay_bp
 
 db.init_app(app)
 app.register_blueprint(auth_bp)
+app.register_blueprint(pay_bp)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
