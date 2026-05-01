@@ -1,4 +1,274 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // ============================================================
+    // ENHANCED DYNAMIC CINEMATIC BACKGROUND
+    // ============================================================
+    const canvas = document.getElementById("bg-canvas");
+    if (canvas) {
+        const ctx = canvas.getContext("2d");
+        let W, H, dpr;
+        let mouseX = 0.5, mouseY = 0.5;
+        let targetMouseX = 0.5, targetMouseY = 0.5;
+        let time = 0;
+        let scrollY = 0;
+        let targetScrollY = 0;
+
+        function resize() {
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+            W = canvas.width = window.innerWidth * dpr;
+            H = canvas.height = window.innerHeight * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        resize();
+        window.addEventListener("resize", resize);
+
+        const CSS_W = () => W / dpr;
+        const CSS_H = () => H / dpr;
+
+        document.addEventListener("mousemove", (e) => {
+            targetMouseX = e.clientX / CSS_W();
+            targetMouseY = e.clientY / CSS_H();
+        });
+        window.addEventListener("scroll", () => {
+            targetScrollY = window.scrollY;
+        });
+
+        // ---- Star: deep-field twinkling background stars ----
+        class Star {
+            constructor() {
+                this.x = Math.random() * 3000;
+                this.y = Math.random() * 3000;
+                this.r = 0.4 + Math.random() * 1.4;
+                this.depth = 0.2 + Math.random() * 0.8;
+                this.twinklePhase = Math.random() * Math.PI * 2;
+                this.twinkleSpeed = 0.5 + Math.random() * 2.0;
+                this.hue = Math.random() < 0.7 ? 40 + Math.random() * 20 : 200 + Math.random() * 40;
+            }
+            draw(ctx, t) {
+                const twinkle = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * this.twinkleSpeed + this.twinklePhase));
+                const a = this.depth * twinkle * 1.0;
+                const px = this.x % CSS_W();
+                const py = this.y % CSS_H();
+                ctx.fillStyle = `hsla(${this.hue}, 60%, 70%, ${a})`;
+                ctx.beginPath();
+                ctx.arc(px, py, this.r, 0, Math.PI * 2);
+                ctx.fill();
+                // Glow halo for brighter stars
+                if (this.r > 0.7 && twinkle > 0.8) {
+                    ctx.fillStyle = `hsla(${this.hue}, 80%, 75%, ${a * 0.3})`;
+                    ctx.beginPath();
+                    ctx.arc(px, py, this.r * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // ---- Blob: slow-moving morphing gradient orbs ----
+        class Blob {
+            constructor() {
+                this.reset(true);
+            }
+            reset(init) {
+                const w = CSS_W(), h = CSS_H();
+                this.x = init ? Math.random() * w : (Math.random() < 0.5 ? -200 : w + 200);
+                this.y = Math.random() * h;
+                this.r = 100 + Math.random() * 300;
+                this.vx = (Math.random() - 0.5) * 0.2;
+                this.vy = (Math.random() - 0.5) * 0.15;
+                this.hue = 30 + Math.random() * 30;
+                if (Math.random() < 0.25) this.hue = 210 + Math.random() * 30;
+                if (Math.random() < 0.15) this.hue = 280 + Math.random() * 20;
+                this.alpha = 0.05 + Math.random() * 0.10;
+                this.phase = Math.random() * Math.PI * 2;
+                this.morphFreq = 0.2 + Math.random() * 0.5;
+                this.morphAmp = 0.5 + Math.random() * 0.5;
+                this.depth = 0.3 + Math.random() * 0.7;
+            }
+            update(dt) {
+                const w = CSS_W(), h = CSS_H();
+                const parallax = this.depth * 0.5;
+                this.x += this.vx * dt + (mouseX - 0.5) * parallax * 0.3;
+                this.y += this.vy * dt + (mouseY - 0.5) * parallax * 0.3;
+                this.vx += ((mouseX - 0.5) * 0.2 * parallax - this.vx) * 0.0003 * dt;
+                this.vy += ((mouseY - 0.5) * 0.2 * parallax - this.vy) * 0.0003 * dt;
+                if (this.x < -this.r) { this.x = w + this.r; this.y = Math.random() * h; }
+                if (this.x > w + this.r) { this.x = -this.r; this.y = Math.random() * h; }
+                if (this.y < -this.r) this.y = h + this.r;
+                if (this.y > h + this.r) this.y = -this.r;
+            }
+            draw(ctx, t) {
+                const morphX = Math.sin(t * this.morphFreq + this.phase) * this.morphAmp * this.r * 0.35;
+                const morphY = Math.cos(t * this.morphFreq * 0.7 + this.phase + 1) * this.morphAmp * this.r * 0.3;
+                const rx = this.r + morphX;
+                const ry = this.r * 0.8 + morphY;
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, Math.max(rx, ry));
+                grad.addColorStop(0, `hsla(${this.hue}, 65%, 55%, ${this.alpha * 1.6})`);
+                grad.addColorStop(0.35, `hsla(${this.hue}, 50%, 35%, ${this.alpha})`);
+                grad.addColorStop(0.7, `hsla(${this.hue}, 40%, 18%, ${this.alpha * 0.25})`);
+                grad.addColorStop(1, "transparent");
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(rx / this.r, ry / this.r);
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // ---- Particle: floating dust with connection networking ----
+        class Particle {
+            constructor() { this.reset(true); }
+            reset(init) {
+                const w = CSS_W(), h = CSS_H();
+                this.x = init ? Math.random() * w : Math.random() * w;
+                this.y = init ? Math.random() * h : h + 10;
+                this.r = 0.3 + Math.random() * 1.2;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = -(0.1 + Math.random() * 0.6);
+                this.alpha = 0.18 + Math.random() * 0.50;
+                this.alphaVar = Math.random() * Math.PI * 2;
+                this.life = 0;
+                this.maxLife = 300 + Math.random() * 800;
+                this.hue = Math.random() < 0.85 ? 38 + Math.random() * 15 : 200 + Math.random() * 30;
+            }
+            update(dt) {
+                const w = CSS_W(), h = CSS_H();
+                this.life += dt;
+                if (this.life > this.maxLife) this.reset(false);
+                this.x += this.vx * dt + Math.sin(this.life * 0.003 + this.alphaVar) * 0.05 * dt;
+                this.y += this.vy * dt;
+                // Gentle mouse attraction on nearby particles
+                const dx = mouseX * w - this.x;
+                const dy = mouseY * h - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 250 && dist > 0) {
+                    this.x += (dx / dist) * 0.3 * dt;
+                    this.y += (dy / dist) * 0.3 * dt;
+                }
+                if (this.y < -10 || this.x < -10 || this.x > w + 10) this.reset(false);
+            }
+            draw(ctx) {
+                const flicker = 0.4 + 0.6 * Math.sin(this.alphaVar + this.life * 0.025);
+                const a = this.alpha * flicker;
+                ctx.fillStyle = `hsla(${this.hue}, 50%, 70%, ${a})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ---- Energy Ripple: expanding ring bursts ----
+        class Ripple {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                const w = CSS_W(), h = CSS_H();
+                this.x = Math.random() * w;
+                this.y = Math.random() * h;
+                this.radius = 0;
+                this.maxRadius = 200 + Math.random() * 400;
+                this.speed = 0.3 + Math.random() * 0.7;
+                this.alpha = 0;
+                this.maxAlpha = 0.10 + Math.random() * 0.12;
+                this.life = 0;
+                this.delay = Math.random() * 6;
+            }
+            update(dt) {
+                this.life += dt * 0.001;
+                if (this.life < this.delay) return;
+                const active = this.life - this.delay;
+                this.radius = active * this.speed * 150;
+                const progress = this.radius / this.maxRadius;
+                if (progress > 1) { this.reset(); this.life = 0; return; }
+                this.alpha = this.maxAlpha * (1 - progress) * Math.sin(progress * Math.PI);
+            }
+            draw(ctx) {
+                if (this.alpha < 0.001) return;
+                ctx.strokeStyle = `rgba(200,163,78,${this.alpha})`;
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        // ---- Cursor Glow ----
+        let glowAlpha = 0, targetGlowAlpha = 0;
+        function drawCursorGlow(ctx) {
+            const w = CSS_W(), h = CSS_H();
+            const mx = mouseX * w, my = mouseY * h;
+            targetGlowAlpha = 0.14;
+            glowAlpha += (targetGlowAlpha - glowAlpha) * 0.05;
+            if (glowAlpha < 0.002) return;
+            const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 280);
+            grad.addColorStop(0, `rgba(220,180,100,${glowAlpha})`);
+            grad.addColorStop(0.5, `rgba(180,140,60,${glowAlpha * 0.4})`);
+            grad.addColorStop(1, "transparent");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(mx, my, 280, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ---- Initialize ----
+        const stars = Array.from({ length: 180 }, () => new Star());
+        const blobs = Array.from({ length: 8 }, () => new Blob());
+        const particles = Array.from({ length: 120 }, () => new Particle());
+        const ripples = Array.from({ length: 4 }, () => new Ripple());
+
+        let lastFrame = performance.now();
+
+        function animate(now) {
+            let dt = now - lastFrame;
+            lastFrame = now;
+            if (dt > 100) dt = 16;
+            time += dt * 0.001;
+            scrollY += (targetScrollY - scrollY) * 0.05;
+
+            mouseX += (targetMouseX - mouseX) * 0.03 * (dt / 16);
+            mouseY += (targetMouseY - mouseY) * 0.03 * (dt / 16);
+
+            ctx.clearRect(0, 0, CSS_W(), CSS_H());
+
+            // Layer 1: deep starfield
+            stars.forEach(s => s.draw(ctx, time));
+
+            // Layer 2: energy ripples
+            ripples.forEach(r => { r.update(dt); r.draw(ctx); });
+
+            // Layer 3: blobs
+            blobs.forEach(b => { b.update(dt); b.draw(ctx, time); });
+
+            // Layer 4: particle network (draw connections then particles)
+            const MAX_DIST = 110;
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < MAX_DIST) {
+                        const alpha = (1 - dist / MAX_DIST) * 0.18;
+                        ctx.strokeStyle = `rgba(200,163,78,${alpha})`;
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            particles.forEach(p => { p.update(dt); p.draw(ctx); });
+
+            // Layer 5: cursor glow (topmost atmospheric layer)
+            drawCursorGlow(ctx);
+
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+    }
     // Character count with over-limit warning
     const textarea = document.getElementById("script_text");
     const charCount = document.getElementById("char-count");
@@ -88,39 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Prompt reference panel — toggle
-    const refToggle = document.getElementById("prompt-ref-toggle");
-    const refPanel = refToggle ? refToggle.parentElement : null;
-    if (refToggle && refPanel) {
-        refToggle.addEventListener("click", () => {
-            refPanel.classList.toggle("open");
-        });
-    }
-
-    // Prompt tag click — copy Chinese text
-    document.querySelectorAll(".prompt-tag").forEach((tag) => {
-        tag.addEventListener("click", () => {
-            const zh = tag.getAttribute("data-zh");
-            if (!zh) return;
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(zh).then(() => {
-                    tag.classList.add("copied");
-                    setTimeout(() => tag.classList.remove("copied"), 800);
-                });
-            } else {
-                const ta = document.createElement("textarea");
-                ta.value = zh;
-                ta.style.position = "fixed";
-                ta.style.opacity = "0";
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand("copy");
-                document.body.removeChild(ta);
-                tag.classList.add("copied");
-                setTimeout(() => tag.classList.remove("copied"), 800);
-            }
-        });
-    });
+    // (prompt builder moved to Prompt Studio page)
 });
 
 // Example short drama script

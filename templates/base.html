@@ -7,17 +7,210 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+    <!-- 动态电影感背景层 -->
+    <canvas id="bg-canvas"></canvas>
+    <div class="cinema-bg">
+        <div class="cinema-grain"></div>
+        <div class="cinema-vignette"></div>
+        <div class="cinema-scanline"></div>
+    </div>
+
     <header class="header">
-        <div class="container">
-            <a href="/" class="logo">🎬 AI 短剧剧本分析器</a>
+        <div class="container header-inner">
+            <a href="/" class="logo">
+                <span class="logo-icon">🎬</span>
+                <span class="logo-text">AI 短剧剧本分析器</span>
+            </a>
+            <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="切换深色/浅色模式">
+                🌙
+            </button>
+            <button class="api-btn" id="api-btn" onclick="openApiModal()">
+                <span class="api-btn-dot"></span>
+                <span class="api-btn-label">API 接口</span>
+            </button>
         </div>
     </header>
+
+    <!-- API 配置模态框 -->
+    <div class="modal-overlay" id="api-modal-overlay" onclick="closeApiModal(event)">
+        <div class="modal-panel" id="api-modal-panel" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title">API 接口配置</span>
+                <button class="modal-close" onclick="closeApiModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="api-provider-badge">
+                    <span class="provider-icon">🔌</span>
+                    <span class="provider-name">DeepSeek V4 Pro</span>
+                    <span class="provider-status" id="provider-status">已连接</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="api-base">API Base URL</label>
+                    <input type="text" id="api-base" placeholder="https://api.deepseek.com/v1">
+                </div>
+                <div class="form-group">
+                    <label for="api-key">API Key</label>
+                    <div class="input-pass-wrap">
+                        <input type="password" id="api-key" placeholder="sk-...">
+                        <button type="button" class="input-pass-toggle" id="pass-toggle" onclick="toggleApiKey()">👁</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="api-model">Model</label>
+                    <input type="text" id="api-model" placeholder="deepseek-chat">
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-primary" id="api-save-btn" onclick="saveApiConfig()">保存配置</button>
+                    <button class="btn btn-outline" onclick="clearApiConfig()">清空</button>
+                </div>
+                <div class="api-save-msg" id="api-save-msg"></div>
+            </div>
+        </div>
+    </div>
     <main class="container">
         {% block content %}{% endblock %}
     </main>
     <footer class="footer">
+        <div class="footer-rule"></div>
         <p>基于大语言模型的短剧多维度分析工具</p>
     </footer>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+    function updateApiStatus(cfg) {
+        var dot = document.querySelector(".api-btn-dot");
+        var status = document.getElementById("provider-status");
+        var hasKey = !!(cfg.api_key) || !!(cfg.has_env_key);
+        if (hasKey) {
+            dot.className = "api-btn-dot connected";
+            status.textContent = "已连接";
+            status.className = "provider-status connected";
+        } else {
+            dot.className = "api-btn-dot";
+            status.textContent = "未配置";
+            status.className = "provider-status";
+        }
+    }
+
+    function openApiModal() {
+        document.getElementById("api-modal-overlay").classList.add("open");
+        fetch("/api/config")
+            .then(function(r) { return r.json(); })
+            .then(function(cfg) {
+                document.getElementById("api-base").value = cfg.api_base || "";
+                document.getElementById("api-key").value = cfg.api_key || "";
+                document.getElementById("api-model").value = cfg.model || "";
+                updateApiStatus(cfg);
+            });
+    }
+
+    function closeApiModal(e) {
+        if (e && e.target !== document.getElementById("api-modal-overlay")) return;
+        document.getElementById("api-modal-overlay").classList.remove("open");
+    }
+
+    function toggleApiKey() {
+        var input = document.getElementById("api-key");
+        var btn = document.getElementById("pass-toggle");
+        if (input.type === "password") {
+            input.type = "text";
+            btn.textContent = "🙈";
+        } else {
+            input.type = "password";
+            btn.textContent = "👁";
+        }
+    }
+
+    function saveApiConfig() {
+        var btn = document.getElementById("api-save-btn");
+        var msg = document.getElementById("api-save-msg");
+        btn.disabled = true;
+        btn.textContent = "保存中...";
+        msg.textContent = "";
+
+        var payload = {
+            api_base: document.getElementById("api-base").value.trim(),
+            api_key: document.getElementById("api-key").value.trim(),
+            model: document.getElementById("api-model").value.trim()
+        };
+
+        fetch("/api/config", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = "保存配置";
+            if (data.ok) {
+                msg.textContent = "✓ 配置已保存，下次分析将使用此配置";
+                msg.className = "api-save-msg success";
+                updateApiStatus({api_key: payload.api_key});
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = "保存配置";
+            msg.textContent = "保存失败，请重试";
+            msg.className = "api-save-msg error";
+        });
+    }
+
+    function clearApiConfig() {
+        document.getElementById("api-base").value = "";
+        document.getElementById("api-key").value = "";
+        document.getElementById("api-model").value = "";
+        // Immediately save empty config to persist the clear
+        var btn = document.getElementById("api-save-btn");
+        var msg = document.getElementById("api-save-msg");
+        btn.disabled = true;
+        btn.textContent = "保存中...";
+        msg.textContent = "";
+
+        fetch("/api/config", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({api_base: "", api_key: "", model: ""})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = "保存配置";
+            if (data.ok) {
+                msg.textContent = "✓ 配置已清空";
+                msg.className = "api-save-msg success";
+                updateApiStatus({api_key: ""});
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = "保存配置";
+            msg.textContent = "操作失败，请重试";
+            msg.className = "api-save-msg error";
+        });
+    }
+    // Auto-update status indicator on page load
+    (function() {
+        fetch("/api/config")
+            .then(function(r) { return r.json(); })
+            .then(function(cfg) { updateApiStatus(cfg); });
+    })();
+
+    // Theme toggle
+    (function() {
+        var saved = localStorage.getItem("theme");
+        if (saved === "light") {
+            document.documentElement.classList.add("light-theme");
+            document.getElementById("theme-toggle-btn").textContent = "☀️";
+        }
+    })();
+    function toggleTheme() {
+        var isLight = document.documentElement.classList.toggle("light-theme");
+        localStorage.setItem("theme", isLight ? "light" : "dark");
+        document.getElementById("theme-toggle-btn").textContent = isLight ? "☀️" : "🌙";
+    }
+    </script>
 </body>
 </html>

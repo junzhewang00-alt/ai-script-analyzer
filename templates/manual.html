@@ -7,7 +7,7 @@
 
 {% if is_demo %}
 <div class="alert alert-warning">
-    ⚠️ 演示模式 — 配置 <code>.env</code> 中的 <code>LLM_API_KEY</code> 获取真实分析
+    ⚠️ 演示模式 — 配置 API 接口信息获取真实分析
 </div>
 {% endif %}
 
@@ -16,7 +16,34 @@
     <span class="script-preview">{{ script_preview }}</span>
 </div>
 
+<div class="progress-bar-wrap" id="progress-wrap">
+    <div class="progress-info">
+        <span class="progress-label">分析进度</span>
+        <span class="progress-text" id="progress-text">0 / {{ total }} 完成</span>
+    </div>
+    <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+    </div>
+</div>
+
 <div class="dim-grid" id="dim-grid">
+    <!-- Overview card -->
+    <div class="dim-card overview-card" id="overview-card" style="display:none">
+        <div class="dim-header" style="border-color: rgba(200,163,78,0.3);">
+            <span class="dim-icon">📊</span>
+            <span class="dim-label" style="color: var(--gold-light);">分析概览</span>
+            <span class="dim-status idle" id="overview-status">待生成</span>
+        </div>
+        <div class="dim-body" id="overview-body">
+            <div class="dim-placeholder">所有维度完成后，点击下方按钮生成概览</div>
+        </div>
+        <div class="dim-actions" id="overview-actions">
+            <button class="btn dim-btn" id="overview-btn" onclick="generateOverview()">
+                📊 生成分析概览
+            </button>
+        </div>
+    </div>
+
     {% for r in results %}
     <div class="dim-card" id="dim-{{ loop.index0 }}" data-index="{{ loop.index0 }}">
         <div class="dim-header">
@@ -34,6 +61,9 @@
             <button class="btn dim-btn" id="btn-{{ loop.index0 }}" onclick="runDimension({{ loop.index0 }})">
                 ▶ 分析此维度
             </button>
+            <button class="btn dim-btn dim-btn-cancel" id="cancel-btn-{{ loop.index0 }}" style="display:none" onclick="cancelDimension({{ loop.index0 }})">
+                ✕ 取消
+            </button>
         </div>
     </div>
     {% endfor %}
@@ -42,6 +72,9 @@
 <div class="action-bar">
     <button class="btn btn-primary" id="run-all-btn" onclick="runAll()">
         ⚡ 一键全部分析
+    </button>
+    <button class="btn btn-outline" id="export-btn" style="display:none" onclick="exportResults()">
+        📋 导出结果
     </button>
     <a href="/" class="btn btn-outline">← 返回首页</a>
 </div>
@@ -52,11 +85,35 @@
 const jobId = "{{ job_id }}";
 const total = {{ total }};
 let runningCount = 0;
+let pollCount = 0;
+const MAX_POLLS = 150;
+
+function updateProgress() {
+    var done = document.querySelectorAll(".dim-status.done").length;
+    var error = document.querySelectorAll(".dim-status.error").length;
+    var pct = Math.round((done + error) / total * 100);
+    document.getElementById("progress-fill").style.width = pct + "%";
+    document.getElementById("progress-text").textContent = (done + error) + " / " + total + " 完成";
+}
+
+function showOverviewCard() {
+    var card = document.getElementById("overview-card");
+    if (card) card.style.display = "";
+}
 
 function updateDimStatus(index, status) {
+    var card = document.getElementById("dim-" + index);
     var el = document.getElementById("status-" + index);
     var btn = document.getElementById("btn-" + index);
+    var cancelBtn = document.getElementById("cancel-btn-" + index);
     el.className = "dim-status " + status;
+
+    if (card) {
+        card.classList.remove("running", "done", "error");
+        if (status === "running" || status === "done" || status === "error") {
+            card.classList.add(status);
+        }
+    }
 
     var texts = {idle: "待分析", running: "分析中...", done: "✓ 已完成", error: "✗ 失败"};
     el.textContent = texts[status] || status;
@@ -65,9 +122,11 @@ function updateDimStatus(index, status) {
         btn.disabled = true;
         btn.textContent = "⏳ 分析中...";
         btn.classList.add("dim-btn-running");
+        if (cancelBtn) cancelBtn.style.display = "inline-block";
         runningCount++;
     } else if (status === "done" || status === "error") {
         btn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
         runningCount--;
         if (status === "error") {
             btn.style.display = "inline-block";
@@ -75,9 +134,19 @@ function updateDimStatus(index, status) {
             btn.textContent = "↻ 重试";
             btn.classList.remove("dim-btn-running");
         }
+    } else if (status === "idle") {
+        if (cancelBtn) cancelBtn.style.display = "none";
+        btn.disabled = false;
+        btn.textContent = "▶ 分析此维度";
+        btn.classList.remove("dim-btn-running");
+        runningCount = Math.max(0, runningCount - 1);
     }
 
-    // Enable/disable run-all button
+    updateProgress();
+
+    var doneCount = document.querySelectorAll(".dim-status.done").length;
+    if (doneCount >= 3) showOverviewCard();
+
     var allBtn = document.getElementById("run-all-btn");
     if (allBtn) {
         var allDone = document.querySelectorAll(".dim-status.done, .dim-status.error").length === total;
@@ -85,6 +154,96 @@ function updateDimStatus(index, status) {
         allBtn.disabled = anyRunning;
         if (allDone) allBtn.style.display = "none";
     }
+}
+
+function cancelDimension(index) {
+    fetch("/api/job/" + jobId + "/cancel/" + index, {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                updateDimStatus(index, "idle");
+                document.getElementById("body-" + index).innerHTML = '<div class="dim-placeholder">已取消，点击重新分析</div>';
+            }
+        });
+}
+
+function generateOverview() {
+    var btn = document.getElementById("overview-btn");
+    var status = document.getElementById("overview-status");
+    btn.disabled = true;
+    btn.textContent = "⏳ 生成中...";
+    btn.classList.add("dim-btn-running");
+    status.className = "dim-status running";
+    status.textContent = "生成中...";
+
+    fetch("/api/job/" + jobId + "/overview", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                status.className = "dim-status error";
+                status.textContent = "✗ 失败";
+                btn.disabled = false;
+                btn.textContent = "↻ 重新生成";
+                btn.classList.remove("dim-btn-running");
+                var el = document.getElementById("error-msg");
+                el.textContent = data.error;
+                el.style.display = "block";
+                return;
+            }
+            if (data.ok) {
+                pollOverview();
+            }
+        });
+}
+
+function pollOverview() {
+    pollCount++;
+    if (pollCount > MAX_POLLS) {
+        document.getElementById("overview-status").className = "dim-status error";
+        document.getElementById("overview-status").textContent = "✗ 超时";
+        document.getElementById("overview-body").innerHTML = '<div class="alert alert-error">概览生成超时，请重试</div>';
+        var btn = document.getElementById("overview-btn");
+        btn.disabled = false;
+        btn.textContent = "↻ 重新生成";
+        btn.classList.remove("dim-btn-running");
+        return;
+    }
+    fetch("/api/job/" + jobId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.overview) {
+                setTimeout(pollOverview, 1500);
+                return;
+            }
+            var ov = data.overview;
+            var body = document.getElementById("overview-body");
+            var status = document.getElementById("overview-status");
+            var btn = document.getElementById("overview-btn");
+            var actions = document.getElementById("overview-actions");
+
+            if (ov.status === "done" && ov.content) {
+                body.innerHTML = '<div class="analysis-content overview-content">' + ov.content + '</div>';
+                status.className = "dim-status done";
+                status.textContent = "✓ 已生成";
+                if (actions) actions.style.display = "none";
+                document.getElementById("overview-card").classList.add("done");
+                showExportBtn();
+            } else if (ov.status === "error") {
+                body.innerHTML = '<div class="alert alert-error">' + (ov.error || "生成失败") + '</div>';
+                status.className = "dim-status error";
+                status.textContent = "✗ 失败";
+                btn.disabled = false;
+                btn.textContent = "↻ 重新生成";
+                btn.classList.remove("dim-btn-running");
+            } else if (ov.status === "running") {
+                status.className = "dim-status running";
+                status.textContent = "生成中...";
+                setTimeout(pollOverview, 1500);
+            }
+        })
+        .catch(function() {
+            setTimeout(pollOverview, 3000);
+        });
 }
 
 function runDimension(index) {
@@ -114,6 +273,13 @@ function runAll() {
 }
 
 function pollResults() {
+    pollCount++;
+    if (pollCount > MAX_POLLS) {
+        var el = document.getElementById("error-msg");
+        el.textContent = "分析超时，部分维度可能未完成，请刷新页面重试";
+        el.style.display = "block";
+        return;
+    }
     fetch("/api/job/" + jobId)
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -135,16 +301,162 @@ function pollResults() {
                         updateDimStatus(i, "running");
                     }
                     hasRunning = true;
+                } else if (r.status === "idle") {
+                    // cancelled or reset — leave as-is
                 }
             });
 
+            // Check for existing overview
+            if (data.overview) {
+                showOverviewCard();
+                var ovBody = document.getElementById("overview-body");
+                var ovStatus = document.getElementById("overview-status");
+                var ovBtn = document.getElementById("overview-btn");
+                var ovActions = document.getElementById("overview-actions");
+                var ov = data.overview;
+                if (ov.status === "done" && ov.content) {
+                    ovBody.innerHTML = '<div class="analysis-content overview-content">' + ov.content + '</div>';
+                    ovStatus.className = "dim-status done";
+                    ovStatus.textContent = "✓ 已生成";
+                    if (ovActions) ovActions.style.display = "none";
+                    document.getElementById("overview-card").classList.add("done");
+                } else if (ov.status === "error") {
+                    ovBody.innerHTML = '<div class="alert alert-error">' + (ov.error || "生成失败") + '</div>';
+                    ovStatus.className = "dim-status error";
+                    ovStatus.textContent = "✗ 失败";
+                    if (ovBtn) { ovBtn.disabled = false; ovBtn.textContent = "↻ 重新生成"; ovBtn.classList.remove("dim-btn-running"); }
+                }
+            }
+
+            updateProgress();
+
             if (hasRunning || runningCount > 0) {
-                setTimeout(pollResults, 2000);
+                var delay = 2000 + Math.min(pollCount * 100, 3000);
+                setTimeout(pollResults, delay);
+            } else {
+                showExportBtn();
             }
         })
         .catch(function() {
-            setTimeout(pollResults, 3000);
+            if (pollCount < MAX_POLLS) {
+                setTimeout(pollResults, 5000);
+            }
         });
 }
+
+function showExportBtn() {
+    var doneCount = document.querySelectorAll(".dim-status.done").length;
+    var exportBtn = document.getElementById("export-btn");
+    if (exportBtn && doneCount >= 1) {
+        exportBtn.style.display = "inline-flex";
+    }
+}
+
+function exportResults() {
+    var parts = [];
+    parts.push("# AI 短剧剧本分析报告\n");
+    parts.push("\n---\n\n");
+
+    var dimCards = document.querySelectorAll(".dim-card");
+    dimCards.forEach(function(card) {
+        var label = card.querySelector(".dim-label");
+        var body = card.querySelector(".dim-body");
+        if (label && body) {
+            var labelText = label.textContent.trim();
+            var content = body.textContent.trim();
+            if (content && content !== "点击下方按钮开始分析") {
+                parts.push("## " + labelText + "\n");
+                parts.push(content + "\n\n---\n");
+            }
+        }
+    });
+
+    var overviewBody = document.getElementById("overview-body");
+    if (overviewBody) {
+        var ovContent = overviewBody.textContent.trim();
+        if (ovContent && ovContent.indexOf("所有维度完成后") === -1) {
+            parts.push("\n## 分析概览\n");
+            parts.push(ovContent + "\n");
+        }
+    }
+
+    var text = parts.join("\n");
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            var btn = document.getElementById("export-btn");
+            var origText = btn.textContent;
+            btn.textContent = "✓ 已复制到剪贴板";
+            btn.style.borderColor = "#4a8";
+            btn.style.color = "#4a8";
+            setTimeout(function() {
+                btn.textContent = origText;
+                btn.style.borderColor = "";
+                btn.style.color = "";
+            }, 2000);
+        }).catch(function() {
+            downloadExport(text);
+        });
+    } else {
+        downloadExport(text);
+    }
+}
+
+function downloadExport(text) {
+    var blob = new Blob([text], {type: "text/markdown;charset=utf-8"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "剧本分析报告_" + jobId + ".md";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 </script>
+
+<script>
+// Auto-poll on page load to pick up any existing results
+(function() {
+    fetch("/api/job/" + jobId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) return;
+            var hasContent = false;
+            (data.results || []).forEach(function(r, i) {
+                if (r.status === "done" && r.content) {
+                    var body = document.getElementById("body-" + i);
+                    body.innerHTML = '<div class="analysis-content">' + r.content + '</div>';
+                    updateDimStatus(i, "done");
+                    hasContent = true;
+                } else if (r.status === "error") {
+                    var body = document.getElementById("body-" + i);
+                    body.innerHTML = '<div class="alert alert-error">' + (r.error || "error") + '</div>';
+                    updateDimStatus(i, "error");
+                    hasContent = true;
+                } else if (r.status === "running") {
+                    updateDimStatus(i, "running");
+                    hasContent = true;
+                }
+            });
+            if (data.overview) {
+                showOverviewCard();
+                var ov = data.overview;
+                if (ov.status === "done" && ov.content) {
+                    document.getElementById("overview-body").innerHTML = '<div class="analysis-content overview-content">' + ov.content + '</div>';
+                    document.getElementById("overview-status").className = "dim-status done";
+                    document.getElementById("overview-status").textContent = "已生成";
+                    document.getElementById("overview-actions").style.display = "none";
+                    document.getElementById("overview-card").classList.add("done");
+                }
+            }
+            updateProgress();
+            if (hasContent) {
+                showExportBtn();
+                setTimeout(pollResults, 2000);
+            }
+        });
+})();
+</script>
+
 {% endblock %}

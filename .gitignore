@@ -8,3 +8,6 @@ venv/
 *.zip
 ngrok.exe
 gh.exe
+example_analysis.json
+example_result.html
+.jobs/
