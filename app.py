@@ -15,13 +15,13 @@ from analyzer.parser import parse_text, parse_file
 from analyzer.llm import call_llm, get_config
 from analyzer.prompts import build_analysis_tasks, SYSTEM_ROLE
 
-load_dotenv(Path(__file__).parent / ".env")
+BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB upload limit
-
-BASE_DIR = Path(__file__).parent
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{BASE_DIR / 'instance' / 'app.db'}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 (BASE_DIR / "instance").mkdir(exist_ok=True)
