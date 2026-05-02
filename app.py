@@ -56,6 +56,17 @@ _cancel_events: dict = {}
 _lock = threading.Lock()
 
 JOB_TTL_SECONDS = 24 * 3600  # 24 小时后自动清理
+LOG_FILE = BASE_DIR / "server.log"
+
+def _log(msg: str):
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(line, flush=True)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 def _get_sid() -> str:
@@ -316,8 +327,10 @@ def run_single_dimension(job_id, index):
     def _run_one():
         try:
             if job["is_demo"]:
+                _log(f"[job={job_id}] dim={index} demo mode start")
                 time.sleep(0.5)
                 if cancel_event.is_set():
+                    _log(f"[job={job_id}] dim={index} cancelled before done")
                     with _lock:
                         job["results"][index]["status"] = "idle"
                         _save_job(job_id)
@@ -336,7 +349,9 @@ def run_single_dimension(job_id, index):
                         "status": "done",
                     }
                     _save_job(job_id)
+                _log(f"[job={job_id}] dim={index} demo mode done")
             else:
+                _log(f"[job={job_id}] dim={index} ({task['label']}) calling LLM")
                 full_prompt = f"{task['instruction']}\n\n{task['user']}"
                 try:
                     output = call_llm(
@@ -346,6 +361,7 @@ def run_single_dimension(job_id, index):
                         model=sc.get("model") or None,
                         cancel_event=cancel_event,
                     )
+                    _log(f"[job={job_id}] dim={index} ({task['label']}) LLM returned {len(output)} chars")
                     with _lock:
                         job["results"][index] = {
                             "label": task["label"],
@@ -356,7 +372,7 @@ def run_single_dimension(job_id, index):
                         _save_job(job_id)
                     _deduct_credits(CREDIT_COST["single_dimension"], f"单维度分析: {task['label']}", user_id=user_id)
                 except RuntimeError as e:
-                    # 用户取消
+                    _log(f"[job={job_id}] dim={index} ({task['label']}) cancelled: {e}")
                     with _lock:
                         job["results"][index] = {
                             "label": task["label"],
@@ -366,6 +382,7 @@ def run_single_dimension(job_id, index):
                         }
                         _save_job(job_id)
                 except Exception as e:
+                    _log(f"[job={job_id}] dim={index} ({task['label']}) ERROR: {e}")
                     with _lock:
                         job["results"][index] = {
                             "label": task["label"],
@@ -378,6 +395,7 @@ def run_single_dimension(job_id, index):
             _cancel_events.pop((job_id, index), None)
 
     threading.Thread(target=_run_one, daemon=True).start()
+    _log(f"[job={job_id}] dim={index} thread started")
 
     return jsonify({"ok": True})
 
@@ -443,8 +461,10 @@ def run_overview(job_id):
     def _run_overview():
         try:
             if job["is_demo"]:
+                _log(f"[job={job_id}] overview demo mode start")
                 time.sleep(0.5)
                 if overview_cancel.is_set():
+                    _log(f"[job={job_id}] overview cancelled")
                     with _lock:
                         job["overview"]["status"] = "idle"
                         _save_job(job_id)
@@ -457,7 +477,9 @@ def run_overview(job_id):
                 with _lock:
                     job["overview"] = {"content": _render_md(demo), "error": None, "status": "done"}
                     _save_job(job_id)
+                _log(f"[job={job_id}] overview demo mode done")
             else:
+                _log(f"[job={job_id}] overview calling LLM with {len(done_results)} dimensions")
                 try:
                     output = call_llm(
                         full_prompt, system_prompt=SYSTEM_ROLE,
@@ -466,15 +488,18 @@ def run_overview(job_id):
                         model=sc.get("model") or None,
                         cancel_event=overview_cancel,
                     )
+                    _log(f"[job={job_id}] overview LLM returned {len(output)} chars")
                     with _lock:
                         job["overview"] = {"content": _render_md(output), "error": None, "status": "done"}
                         _save_job(job_id)
                     _deduct_credits(CREDIT_COST["overview"], "生成分析概览", user_id=user_id)
                 except RuntimeError:
+                    _log(f"[job={job_id}] overview cancelled via RuntimeError")
                     with _lock:
                         job["overview"] = {"content": "", "error": None, "status": "idle"}
                         _save_job(job_id)
                 except Exception as e:
+                    _log(f"[job={job_id}] overview ERROR: {e}")
                     with _lock:
                         job["overview"] = {"content": "", "error": str(e), "status": "error"}
                         _save_job(job_id)
