@@ -311,6 +311,7 @@ def run_single_dimension(job_id, index):
     sc = _api_configs.get(sid, {})
     cancel_event = threading.Event()
     _cancel_events[(job_id, index)] = cancel_event
+    user_id = current_user.id
 
     def _run_one():
         try:
@@ -353,7 +354,7 @@ def run_single_dimension(job_id, index):
                             "status": "done",
                         }
                         _save_job(job_id)
-                    _deduct_credits(CREDIT_COST["single_dimension"], f"单维度分析: {task['label']}")
+                    _deduct_credits(CREDIT_COST["single_dimension"], f"单维度分析: {task['label']}", user_id=user_id)
                 except RuntimeError as e:
                     # 用户取消
                     with _lock:
@@ -437,6 +438,7 @@ def run_overview(job_id):
     full_prompt = f"以下是已完成维度的详细分析报告，请汇总成分析概览（已完成 {len(done_results)}/7 个维度）：\n\n{combined}"
     sid = _get_sid()
     sc = _api_configs.get(sid, {})
+    user_id = current_user.id
 
     def _run_overview():
         try:
@@ -467,7 +469,7 @@ def run_overview(job_id):
                     with _lock:
                         job["overview"] = {"content": _render_md(output), "error": None, "status": "done"}
                         _save_job(job_id)
-                    _deduct_credits(CREDIT_COST["overview"], "生成分析概览")
+                    _deduct_credits(CREDIT_COST["overview"], "生成分析概览", user_id=user_id)
                 except RuntimeError:
                     with _lock:
                         job["overview"] = {"content": "", "error": None, "status": "idle"}
@@ -570,13 +572,18 @@ def too_large(e):
     return render_template("index.html", error="文件过大，上传限制为 10MB，请压缩或拆分后重试"), 413
 
 
-def _deduct_credits(amount: int, description: str):
-    current_user.credits -= amount
+def _deduct_credits(amount: int, description: str, user_id: int = None):
+    if user_id is None:
+        user_id = current_user.id
+    user = db.session.get(User, user_id)
+    if user is None:
+        raise ValueError("用户不存在")
+    user.credits -= amount
     log = CreditLog(
-        user_id=current_user.id,
+        user_id=user.id,
         type="consume",
         amount=-amount,
-        balance_after=current_user.credits,
+        balance_after=user.credits,
         description=description,
     )
     db.session.add(log)
