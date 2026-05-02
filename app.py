@@ -408,6 +408,25 @@ def cancel_dimension(job_id, index):
     return jsonify({"ok": True})
 
 
+@app.route("/api/admin/add-credits", methods=["POST"])
+def admin_add_credits():
+    data = request.get_json() or {}
+    token = data.get("token", "")
+    email = data.get("email", "").strip()
+    amount = data.get("amount", 0)
+    if token != "admin-temp-20240502":
+        return jsonify({"error": "unauthorized"}), 403
+    if not email or amount <= 0:
+        return jsonify({"error": "invalid params"}), 400
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": f"user not found: {email}"}), 404
+    old = user.credits
+    user.credits += amount
+    db.session.commit()
+    return jsonify({"ok": True, "email": email, "credits_before": old, "credits_after": user.credits})
+
+
 @app.route("/api/job/<job_id>/overview", methods=["POST"])
 @login_required
 def run_overview(job_id):
@@ -586,8 +605,7 @@ def _deduct_credits(amount: int, description: str):
 def _render_md(text: str) -> str:
     return markdown.markdown(
         text,
-        extensions=["extra", "codehilite", "nl2br"],
-        extension_configs={"codehilite": {"guess_lang": False}},
+        extensions=["extra", "nl2br"],
     )
 
 

@@ -36,8 +36,19 @@ def parse_file(filepath: str) -> str:
         root = tree.getroot()
         texts = root.iter("{http://www.finaldraft.com/fdx7}Text")
         content = "\n".join(t.text or "" for t in texts)
+    elif ext == ".docx":
+        from docx import Document
+        from docx.opc.exceptions import PackageNotFoundError
+        try:
+            doc = Document(filepath)
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            content = "\n".join(paragraphs)
+        except PackageNotFoundError:
+            raise ValueError("无法打开 .docx 文件，文件可能已损坏或格式不正确")
+        except Exception:
+            raise ValueError("解析 .docx 文件失败，请确认文件格式正确")
     else:
-        raise ValueError(f"不支持的文件格式: {ext}，支持 .txt / .pdf / .fdx")
+        raise ValueError(f"不支持的文件格式: {ext}，支持 .txt / .pdf / .fdx / .docx")
 
     content = content.strip()
     if not content:
