@@ -48,7 +48,7 @@ def call_llm(prompt: str, system_prompt: str = "",
             model=model or MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=4096,
+            max_tokens=8192,
             timeout=120,
         )
         return response.choices[0].message.content or ""
@@ -58,7 +58,7 @@ def call_llm(prompt: str, system_prompt: str = "",
         model=model or MODEL,
         messages=messages,
         temperature=0.7,
-        max_tokens=4096,
+        max_tokens=8192,
         timeout=120,
         stream=True,
     )
