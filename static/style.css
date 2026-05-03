@@ -2245,14 +2245,58 @@ html.light-theme ::-webkit-scrollbar-thumb {
     font-size: 1.2rem;
 }
 
+/* Stripe card payment modal */
+.pay-card-wrap {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.pay-card-modal {
+    background: var(--card-bg);
+    border-radius: 16px;
+    width: 420px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.pay-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pay-card-body {
+    padding: 24px 20px 20px;
+}
+
+#payment-element {
+    margin-top: 16px;
+    min-height: 100px;
+}
+
+.pay-message {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
 @media (max-width: 480px) {
     .recharge-grid {
         grid-template-columns: 1fr 1fr;
         gap: 10px;
     }
-    .pay-qrcode-card {
+    .pay-card-modal {
         width: 90vw;
-        max-width: 340px;
+        max-width: 420px;
     }
 }
 

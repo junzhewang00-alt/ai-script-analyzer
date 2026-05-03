@@ -8,7 +8,7 @@
 
     {% if not configured %}
     <div class="flash flash-error" style="max-width:500px;margin:0 auto 24px;">
-        支付接口未配置，请在 <code>.env</code> 中设置 <code>PAYJS_MCHID</code>、<code>PAYJS_SECRET</code>、<code>PAYJS_NOTIFY_URL</code>
+        支付接口未配置，请在 <code>.env</code> 中设置 <code>STRIPE_SECRET_KEY</code>、<code>STRIPE_PUBLISHABLE_KEY</code>
     </div>
     {% endif %}
 
@@ -29,37 +29,40 @@
     </div>
 
     <div class="recharge-action" id="recharge-action">
-        <button class="btn btn-primary btn-lg" id="btn-create" onclick="createRechargeOrder()">
-            💳 生成支付码
+        <button class="btn btn-primary btn-lg" id="btn-create" onclick="startPayment()">
+            💳 去支付
         </button>
     </div>
 
-    <div class="pay-qrcode-wrap" id="pay-qrcode-wrap" style="display:none;">
-        <div class="pay-qrcode-card">
-            <div class="pay-qrcode-header">
-                <span>微信扫码支付</span>
-                <button class="modal-close" onclick="closePayQR()">&times;</button>
+    <div class="pay-card-wrap" id="pay-card-wrap" style="display:none;">
+        <div class="pay-card-modal">
+            <div class="pay-card-header">
+                <span>银行卡支付</span>
+                <button class="modal-close" onclick="closePayCard()">&times;</button>
             </div>
-            <div class="pay-qrcode-body">
-                <img id="pay-qrcode-img" src="" alt="支付二维码" style="width:200px;height:200px;">
+            <div class="pay-card-body">
                 <p class="pay-amount-text">支付 <strong id="pay-amount-text"></strong> 元</p>
-                <p class="pay-hint">请使用微信扫一扫</p>
-                <div class="pay-status" id="pay-status">
-                    <span class="pay-status-icon">⏳</span>
-                    <span id="pay-status-text">等待支付...</span>
-                </div>
+                <div id="payment-element"></div>
+                <button id="btn-submit" class="btn btn-primary btn-block" style="margin-top:16px;">
+                    确认支付 ¥<span id="btn-amount"></span>
+                </button>
+                <div id="pay-message" class="pay-message"></div>
             </div>
         </div>
     </div>
 </div>
 
+<script src="https://js.stripe.com/v3/"></script>
 <script>
-var currentOrderNo = null;
-var pollTimer = null;
+var stripe = Stripe("{{ stripe_publishable_key }}");
+var elements;
+var currentClientSecret = null;
+var currentAmountYuan = 0;
 
-function createRechargeOrder() {
+function startPayment() {
     var selected = document.querySelector('input[name="amount"]:checked');
     if (!selected) return;
+    currentAmountYuan = parseInt(selected.value);
 
     var btn = document.getElementById("btn-create");
     btn.disabled = true;
@@ -68,71 +71,100 @@ function createRechargeOrder() {
     fetch("/pay/create", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({amount_yuan: parseInt(selected.value)})
+        body: JSON.stringify({amount_yuan: currentAmountYuan})
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
         btn.disabled = false;
-        btn.textContent = "💳 生成支付码";
+        btn.textContent = "💳 去支付";
         if (d.ok) {
-            currentOrderNo = d.out_trade_no;
-            document.getElementById("pay-qrcode-img").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(d.code_url);
+            currentClientSecret = d.clientSecret;
             document.getElementById("pay-amount-text").textContent = d.amount_yuan;
-            document.getElementById("pay-qrcode-wrap").style.display = "flex";
+            document.getElementById("btn-amount").textContent = d.amount_yuan;
+            document.getElementById("pay-card-wrap").style.display = "flex";
             document.getElementById("recharge-grid").style.opacity = "0.5";
             document.getElementById("recharge-action").style.display = "none";
-            document.getElementById("pay-status-text").textContent = "等待支付...";
-            document.querySelector(".pay-status-icon").textContent = "⏳";
-            startPolling(d.out_trade_no);
+            document.getElementById("pay-message").textContent = "";
+            document.getElementById("btn-submit").disabled = false;
+            setupStripeElements();
         } else {
             alert(d.error || "创建订单失败");
         }
     })
     .catch(function() {
         btn.disabled = false;
-        btn.textContent = "💳 生成支付码";
+        btn.textContent = "💳 去支付";
         alert("网络错误，请重试");
     });
 }
 
-function startPolling(outTradeNo) {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(function() {
-        fetch("/pay/status/" + outTradeNo)
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.status === "paid") {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    document.getElementById("pay-status-text").textContent = "支付成功！积分已到账";
-                    document.querySelector(".pay-status-icon").textContent = "✅";
-                    document.getElementById("pay-qrcode-img").style.opacity = "0.5";
-                    // 更新顶栏积分
-                    var headerCredits = document.getElementById("header-credits");
-                    if (headerCredits) headerCredits.textContent = d.credits;
-                    // 延迟刷新
-                    setTimeout(function() {
-                        location.reload();
-                    }, 2000);
-                } else if (d.status === "failed") {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    document.getElementById("pay-status-text").textContent = "订单失败，请重试";
-                    document.querySelector(".pay-status-icon").textContent = "❌";
-                }
-            });
-    }, 3000);
+function setupStripeElements() {
+    if (elements) {
+        elements.getElement("payment").unmount();
+    }
+    elements = stripe.elements({clientSecret: currentClientSecret});
+    var paymentElement = elements.create("payment", {
+        layout: "tabs",
+        defaultValues: {billingDetails: {name: "{{ current_user.display_name }}"}}
+    });
+    paymentElement.mount("#payment-element");
 }
 
-function closePayQR() {
-    document.getElementById("pay-qrcode-wrap").style.display = "none";
+document.getElementById("btn-submit").addEventListener("click", function() {
+    var btn = document.getElementById("btn-submit");
+    btn.disabled = true;
+    btn.textContent = "处理中...";
+    document.getElementById("pay-message").textContent = "";
+
+    stripe.confirmPayment({
+        elements: elements,
+        redirect: "if_required",
+        confirmParams: {return_url: window.location.href}
+    })
+    .then(function(result) {
+        if (result.error) {
+            document.getElementById("pay-message").innerHTML =
+                '<span style="color:#e74c3c">' + result.error.message + "</span>";
+            btn.disabled = false;
+            btn.textContent = "确认支付 ¥" + currentAmountYuan;
+        } else {
+            // 支付成功，服务端确认
+            confirmOnServer(result.paymentIntent.id);
+        }
+    });
+});
+
+function confirmOnServer(paymentIntentId) {
+    document.getElementById("pay-message").innerHTML = '<span style="color:#333">验证支付...</span>';
+    fetch("/pay/confirm", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({payment_intent_id: paymentIntentId})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.ok) {
+            document.getElementById("pay-message").innerHTML =
+                '<span style="color:#27ae60">支付成功！积分已到账</span>';
+            var headerCredits = document.getElementById("header-credits");
+            if (headerCredits) headerCredits.textContent = d.credits;
+            setTimeout(function() { location.reload(); }, 2000);
+        } else {
+            document.getElementById("pay-message").innerHTML =
+                '<span style="color:#e74c3c">验证失败: ' + (d.error || "未知错误") + "</span>";
+        }
+    });
+}
+
+function closePayCard() {
+    document.getElementById("pay-card-wrap").style.display = "none";
     document.getElementById("recharge-grid").style.opacity = "1";
     document.getElementById("recharge-action").style.display = "block";
-    if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
+    if (elements) {
+        elements.getElement("payment").unmount();
+        elements = null;
     }
-    currentOrderNo = null;
+    currentClientSecret = null;
 }
 </script>
 {% endblock %}
