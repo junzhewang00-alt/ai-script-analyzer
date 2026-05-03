@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 SYSTEM_ROLE = (
     "你是一位经验丰富的短剧编剧，已编写过30部热播短剧，"
     "覆盖职场、爱情、校园、仙侠、悬疑等多类题材。"
