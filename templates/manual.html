@@ -33,6 +33,7 @@
             <span class="dim-icon">📊</span>
             <span class="dim-label" style="color: var(--gold-light);">分析概览</span>
             <span class="dim-status idle" id="overview-status">待生成</span>
+            <button class="btn btn-sm btn-outline dim-export-btn" id="export-overview-btn" style="display:none" onclick="exportOverview(event)" title="导出概览">📋</button>
         </div>
         <div class="dim-body" id="overview-body">
             <div class="dim-placeholder">所有维度完成后，点击下方按钮生成概览</div>
@@ -53,6 +54,7 @@
             }.get(r.label, "📋") }}</span>
             <span class="dim-label">{{ r.label }}</span>
             <span class="dim-status idle" id="status-{{ loop.index0 }}">待分析</span>
+            <button class="btn btn-sm btn-outline dim-export-btn" id="export-dim-btn-{{ loop.index0 }}" style="display:none" onclick="exportDimension(event, {{ loop.index0 }})" title="导出此维度">📋</button>
         </div>
         <div class="dim-body" id="body-{{ loop.index0 }}">
             <div class="dim-placeholder">点击下方按钮开始分析</div>
@@ -73,9 +75,16 @@
     <button class="btn btn-primary" id="run-all-btn" onclick="runAll()">
         ⚡ 一键全部分析
     </button>
-    <button class="btn btn-outline" id="export-btn" style="display:none" onclick="exportResults()">
-        📋 导出结果
-    </button>
+    <div class="export-dropdown" id="export-group" style="display:none">
+        <button class="btn btn-outline" id="export-btn" onclick="toggleExportMenu(event)">
+            📋 导出结果 ▾
+        </button>
+        <div class="export-menu" id="export-menu" style="display:none">
+            <button class="export-menu-item" onclick="exportResults('md'); toggleExportMenu()">📋 Markdown (.md)</button>
+            <button class="export-menu-item" onclick="exportResults('txt'); toggleExportMenu()">📄 纯文本 (.txt)</button>
+            <button class="export-menu-item" onclick="exportResults('pdf'); toggleExportMenu()">🖨️ PDF (.pdf)</button>
+        </div>
+    </div>
     <a href="/" class="btn btn-outline">← 返回首页</a>
 </div>
 
@@ -128,6 +137,10 @@ function updateDimStatus(index, status) {
         btn.style.display = "none";
         if (cancelBtn) cancelBtn.style.display = "none";
         runningCount--;
+        if (status === "done") {
+            var exportDimBtn = document.getElementById("export-dim-btn-" + index);
+            if (exportDimBtn) exportDimBtn.style.display = "";
+        }
         if (status === "error") {
             btn.style.display = "inline-block";
             btn.disabled = false;
@@ -228,6 +241,8 @@ function pollOverview() {
                 if (actions) actions.style.display = "none";
                 document.getElementById("overview-card").classList.add("done");
                 showExportBtn();
+                var ovExportBtn = document.getElementById("export-overview-btn");
+                if (ovExportBtn) ovExportBtn.style.display = "";
             } else if (ov.status === "error") {
                 body.innerHTML = '<div class="alert alert-error">' + (ov.error || "生成失败") + '</div>';
                 status.className = "dim-status error";
@@ -320,6 +335,8 @@ function pollResults() {
                     ovStatus.textContent = "✓ 已生成";
                     if (ovActions) ovActions.style.display = "none";
                     document.getElementById("overview-card").classList.add("done");
+                    var ovExportBtn = document.getElementById("export-overview-btn");
+                    if (ovExportBtn) ovExportBtn.style.display = "";
                 } else if (ov.status === "error") {
                     ovBody.innerHTML = '<div class="alert alert-error">' + (ov.error || "生成失败") + '</div>';
                     ovStatus.className = "dim-status error";
@@ -346,27 +363,102 @@ function pollResults() {
 
 function showExportBtn() {
     var doneCount = document.querySelectorAll(".dim-status.done").length;
-    var exportBtn = document.getElementById("export-btn");
-    if (exportBtn && doneCount >= 1) {
-        exportBtn.style.display = "inline-flex";
+    var exportGroup = document.getElementById("export-group");
+    if (exportGroup && doneCount >= 1) {
+        exportGroup.style.display = "";
     }
 }
 
-function exportResults() {
-    var parts = [];
-    parts.push("# AI 短剧剧本分析报告\n");
-    parts.push("\n---\n\n");
+function toggleExportMenu(e) {
+    if (e) e.stopPropagation();
+    var menu = document.getElementById("export-menu");
+    var fmtPicker = document.getElementById("fmt-picker");
+    if (fmtPicker) fmtPicker.style.display = "none";
+    menu.style.display = menu.style.display === "none" ? "" : "none";
+}
 
-    var dimCards = document.querySelectorAll(".dim-card");
-    dimCards.forEach(function(card) {
+// Close dropdown on outside click
+document.addEventListener("click", function(e) {
+    var menu = document.getElementById("export-menu");
+    var fmtPicker = document.getElementById("fmt-picker");
+    var target = e.target;
+    var isExportBtn = target.closest(".dim-export-btn") || target.closest("#export-btn");
+    var isInMenu = target.closest(".export-menu-item");
+    var isInPicker = target.closest(".fmt-picker-btns");
+    if (menu && !isInMenu) menu.style.display = "none";
+    if (fmtPicker && !isExportBtn && !isInPicker) fmtPicker.style.display = "none";
+});
+
+// ---- Single-dimension export ----
+
+function exportDimension(ev, index) {
+    var card = document.getElementById("dim-" + index);
+    if (!card) return;
+    var label = card.querySelector(".dim-label");
+    var body = card.querySelector(".dim-body");
+    if (!label || !body) return;
+    var labelText = label.textContent.trim();
+    var content = body.textContent.trim();
+    if (!content) return;
+    showFormatPicker(ev, function(fmt) {
+        var text = "# " + labelText + "\n\n" + content + "\n";
+        outputExport(text, labelText, fmt);
+    });
+}
+
+function exportOverview(ev) {
+    var body = document.getElementById("overview-body");
+    if (!body) return;
+    var content = body.textContent.trim();
+    if (!content) return;
+    showFormatPicker(ev, function(fmt) {
+        var text = "# 分析概览\n\n" + content + "\n";
+        outputExport(text, "分析概览", fmt);
+    });
+}
+
+function showFormatPicker(ev, callback) {
+    var picker = document.getElementById("fmt-picker");
+    if (!picker) {
+        picker = document.createElement("div");
+        picker.id = "fmt-picker";
+        picker.className = "fmt-picker";
+        picker.innerHTML = '<div class="fmt-picker-btns">' +
+            '<button data-fmt="md">📋 MD</button>' +
+            '<button data-fmt="txt">📄 TXT</button>' +
+            '<button data-fmt="pdf">🖨️ PDF</button>' +
+            '</div>';
+        document.body.appendChild(picker);
+        picker.addEventListener("click", function(e) {
+            var btn = e.target.closest("button");
+            if (btn && btn.dataset.fmt) {
+                picker.style.display = "none";
+                callback(btn.dataset.fmt);
+            }
+            e.stopPropagation();
+        });
+    }
+    picker.style.display = "";
+    // Position near the clicked button
+    if (ev) {
+        picker.style.left = (ev.clientX + 10) + "px";
+        picker.style.top = (ev.clientY - 10) + "px";
+    }
+}
+
+// ---- Full export ----
+
+function exportResults(fmt) {
+    var parts = ["# AI 短剧剧本分析报告\n\n---\n\n"];
+
+    document.querySelectorAll(".dim-card").forEach(function(card) {
         var label = card.querySelector(".dim-label");
         var body = card.querySelector(".dim-body");
         if (label && body) {
             var labelText = label.textContent.trim();
             var content = body.textContent.trim();
             if (content && content !== "点击下方按钮开始分析") {
-                parts.push("## " + labelText + "\n");
-                parts.push(content + "\n\n---\n");
+                parts.push("## " + labelText + "\n\n" + content + "\n\n---\n");
             }
         }
     });
@@ -375,43 +467,86 @@ function exportResults() {
     if (overviewBody) {
         var ovContent = overviewBody.textContent.trim();
         if (ovContent && ovContent.indexOf("所有维度完成后") === -1) {
-            parts.push("\n## 分析概览\n");
-            parts.push(ovContent + "\n");
+            parts.push("\n## 分析概览\n\n" + ovContent + "\n");
         }
     }
 
-    var text = parts.join("\n");
+    outputExport(parts.join("\n"), "剧本分析报告", fmt);
+}
 
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function() {
-            var btn = document.getElementById("export-btn");
-            var origText = btn.textContent;
-            btn.textContent = "✓ 已复制到剪贴板";
-            btn.style.borderColor = "#4a8";
-            btn.style.color = "#4a8";
-            setTimeout(function() {
-                btn.textContent = origText;
-                btn.style.borderColor = "";
-                btn.style.color = "";
-            }, 2000);
-        }).catch(function() {
-            downloadExport(text);
-        });
+// ---- Output: dispatch by format ----
+
+function outputExport(text, label, fmt) {
+    if (fmt === "txt") {
+        // Strip markdown syntax: headers, bold, italic, code fences
+        var plain = text
+            .replace(/^#{1,6}\s+/gm, "")
+            .replace(/\*\*(.+?)\*\*/g, "$1")
+            .replace(/\*(.+?)\*/g, "$1")
+            .replace(/`{1,3}[^`]*`{1,3}/g, "")
+            .replace(/^---\s*$/gm, "──────────────────")
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+        downloadAsFile(plain, label, "txt", "text/plain;charset=utf-8");
+        flashExportBtn();
+    } else if (fmt === "pdf") {
+        var mdHtml = text
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+            .replace(/^---\s*$/gm, '<hr>')
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/\n/g, '<br>');
+        mdHtml = '<p>' + mdHtml + '</p>';
+        var w = window.open("", "_blank", "width=800,height=600");
+        w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + label + '</title>' +
+            '<style>body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;max-width:720px;margin:40px auto;padding:20px;line-height:1.9;color:#2c2c2c;}' +
+            'h1{font-size:1.6em;border-bottom:2px solid #c8a34e;padding-bottom:8px;}h2{font-size:1.25em;color:#c8a34e;margin-top:28px;}h3{font-size:1.05em;}' +
+            'hr{border:0;border-top:1px solid #ddd;margin:24px 0;}@media print{body{margin:0;padding:0;}}</style></head><body>' + mdHtml + '</body></html>');
+        w.document.close();
+        w.focus();
+        setTimeout(function() { w.print(); }, 500);
+        flashExportBtn();
     } else {
-        downloadExport(text);
+        // md — default
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                flashExportBtn();
+            }).catch(function() {
+                downloadAsFile(text, label, "md", "text/markdown;charset=utf-8");
+                flashExportBtn();
+            });
+        } else {
+            downloadAsFile(text, label, "md", "text/markdown;charset=utf-8");
+            flashExportBtn();
+        }
     }
 }
 
-function downloadExport(text) {
-    var blob = new Blob([text], {type: "text/markdown;charset=utf-8"});
+function downloadAsFile(text, label, ext, mime) {
+    var blob = new Blob([text], {type: mime});
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
-    a.download = "剧本分析报告_" + jobId + ".md";
+    a.download = label + "_" + jobId + "." + ext;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+function flashExportBtn() {
+    var btn = document.getElementById("export-btn");
+    if (!btn) return;
+    var origHTML = btn.innerHTML;
+    btn.innerHTML = "✓ 已导出";
+    btn.style.borderColor = "#4a8";
+    btn.style.color = "#4a8";
+    setTimeout(function() {
+        btn.innerHTML = origHTML;
+        btn.style.borderColor = "";
+        btn.style.color = "";
+    }, 2000);
 }
 </script>
 

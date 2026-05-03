@@ -43,6 +43,16 @@ login_manager.login_message = "请先登录后再使用此功能"
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
+@app.before_request
+def _hide_api_from_public():
+    """对未登录用户隐藏 API/Pay 路由，直接返回 404（不暴露接口存在）"""
+    if not current_user.is_authenticated:
+        if request.path.startswith("/api/") or (
+            request.path.startswith("/pay/") and request.path != "/pay/notify"
+        ):
+            return jsonify({"error": "Not Found"}), 404
+
 UPLOAD_FOLDER = tempfile.gettempdir()
 JOBS_DIR = BASE_DIR / ".jobs"
 JOBS_DIR.mkdir(exist_ok=True)
@@ -156,6 +166,7 @@ def index():
 
 
 @app.route("/prompts")
+@login_required
 def prompts_studio():
     return render_template("prompts.html")
 
@@ -184,15 +195,6 @@ def analyze():
         return render_template("index.html", error=str(e))
     except Exception as e:
         return render_template("index.html", error=f"文件解析失败: {e}")
-
-    # 积分检查
-    cost = get_analysis_cost(len(script_text))
-    if current_user.credits < cost:
-        return render_template("index.html",
-            error=f"积分不足！本次分析需要 {cost} 积分，当前余额 {current_user.credits} 积分。"
-                  f'<a href="/dashboard">去充值</a>')
-
-    _deduct_credits(cost, f"剧本分析 ({len(script_text)}字)")
 
     sid = _get_sid()
     sc = _api_configs.get(sid, {})
@@ -259,6 +261,7 @@ def job_status(job_id):
 
 
 @app.route("/api/config", methods=["GET"])
+@login_required
 def api_config_get():
     is_local = request.remote_addr in ("127.0.0.1", "localhost", "::1")
     sid = _get_sid()
@@ -283,6 +286,7 @@ def api_config_get():
 
 
 @app.route("/api/config", methods=["POST"])
+@login_required
 def api_config_save():
     data = request.get_json() or {}
     sid = _get_sid()
@@ -372,15 +376,26 @@ def run_single_dimension(job_id, index):
                         _save_job(job_id)
                     _deduct_credits(CREDIT_COST["single_dimension"], f"单维度分析: {task['label']}", user_id=user_id)
                 except RuntimeError as e:
-                    _log(f"[job={job_id}] dim={index} ({task['label']}) cancelled: {e}")
-                    with _lock:
-                        job["results"][index] = {
-                            "label": task["label"],
-                            "content": "",
-                            "error": None,
-                            "status": "idle",
-                        }
-                        _save_job(job_id)
+                    if "分析已取消" in str(e):
+                        _log(f"[job={job_id}] dim={index} ({task['label']}) cancelled by user")
+                        with _lock:
+                            job["results"][index] = {
+                                "label": task["label"],
+                                "content": "",
+                                "error": None,
+                                "status": "idle",
+                            }
+                            _save_job(job_id)
+                    else:
+                        _log(f"[job={job_id}] dim={index} ({task['label']}) RuntimeError: {e}")
+                        with _lock:
+                            job["results"][index] = {
+                                "label": task["label"],
+                                "content": "",
+                                "error": str(e),
+                                "status": "error",
+                            }
+                            _save_job(job_id)
                 except Exception as e:
                     _log(f"[job={job_id}] dim={index} ({task['label']}) ERROR: {e}")
                     with _lock:
@@ -493,11 +508,17 @@ def run_overview(job_id):
                         job["overview"] = {"content": _render_md(output), "error": None, "status": "done"}
                         _save_job(job_id)
                     _deduct_credits(CREDIT_COST["overview"], "生成分析概览", user_id=user_id)
-                except RuntimeError:
-                    _log(f"[job={job_id}] overview cancelled via RuntimeError")
-                    with _lock:
-                        job["overview"] = {"content": "", "error": None, "status": "idle"}
-                        _save_job(job_id)
+                except RuntimeError as e:
+                    if "分析已取消" in str(e):
+                        _log(f"[job={job_id}] overview cancelled by user")
+                        with _lock:
+                            job["overview"] = {"content": "", "error": None, "status": "idle"}
+                            _save_job(job_id)
+                    else:
+                        _log(f"[job={job_id}] overview RuntimeError: {e}")
+                        with _lock:
+                            job["overview"] = {"content": "", "error": str(e), "status": "error"}
+                            _save_job(job_id)
                 except Exception as e:
                     _log(f"[job={job_id}] overview ERROR: {e}")
                     with _lock:
@@ -600,19 +621,20 @@ def too_large(e):
 def _deduct_credits(amount: int, description: str, user_id: int = None):
     if user_id is None:
         user_id = current_user.id
-    user = db.session.get(User, user_id)
-    if user is None:
-        raise ValueError("用户不存在")
-    user.credits -= amount
-    log = CreditLog(
-        user_id=user.id,
-        type="consume",
-        amount=-amount,
-        balance_after=user.credits,
-        description=description,
-    )
-    db.session.add(log)
-    db.session.commit()
+    with app.app_context():
+        user = db.session.get(User, user_id)
+        if user is None:
+            raise ValueError("用户不存在")
+        user.credits -= amount
+        log = CreditLog(
+            user_id=user.id,
+            type="consume",
+            amount=-amount,
+            balance_after=user.credits,
+            description=description,
+        )
+        db.session.add(log)
+        db.session.commit()
 
 
 def _render_md(text: str) -> str:

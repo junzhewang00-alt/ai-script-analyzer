@@ -241,46 +241,6 @@ body {
     box-shadow: 0 0 12px rgba(200,163,78,0.08);
 }
 
-/* ---- API Button (top-right) ---- */
-.api-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: var(--input-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    transition: all 0.25s;
-}
-
-.api-btn:hover {
-    border-color: var(--gold-dark);
-    color: var(--gold-light);
-    box-shadow: 0 0 16px rgba(200,163,78,0.08);
-}
-
-.api-btn-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    transition: background 0.3s, box-shadow 0.3s;
-}
-
-.api-btn-dot.connected {
-    background: #4a8;
-    box-shadow: 0 0 6px rgba(68,170,136,0.5);
-}
-
-.api-btn-label {
-    white-space: nowrap;
-}
-
 main {
     flex: 1;
     padding: 48px 0 72px;
@@ -1190,6 +1150,87 @@ textarea:focus {
     border-color: rgba(200, 57, 43, 0.3);
 }
 
+.dim-export-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    border-color: transparent;
+    opacity: 0.6;
+    transition: all 0.2s;
+}
+.dim-export-btn:hover {
+    opacity: 1;
+    border-color: var(--gold-dark);
+    background: rgba(200,163,78,0.08);
+}
+
+/* ---- Export Dropdown ---- */
+.export-dropdown {
+    position: relative;
+    display: inline-flex;
+}
+.export-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 6px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    z-index: 100;
+    min-width: 190px;
+    overflow: hidden;
+}
+.export-menu-item {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.export-menu-item:hover {
+    background: rgba(200,163,78,0.08);
+    color: var(--gold-light);
+}
+
+/* ---- Format Picker (floating) ---- */
+.fmt-picker {
+    position: fixed;
+    z-index: 200;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    overflow: hidden;
+}
+.fmt-picker-btns {
+    display: flex;
+}
+.fmt-picker-btns button {
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.fmt-picker-btns button:hover {
+    background: rgba(200,163,78,0.1);
+    color: var(--gold-light);
+}
+.fmt-picker-btns button + button {
+    border-left: 1px solid var(--border);
+}
+
 /* ---- Overview Card ---- */
 .overview-card {
     border-color: rgba(200, 163, 78, 0.35);
@@ -1216,212 +1257,6 @@ textarea:focus {
     width: auto;
     padding: 14px 44px;
     font-size: 1rem;
-}
-
-/* ============================================================
-   API CONFIG MODAL
-   ============================================================ */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s;
-}
-
-.modal-overlay.open {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.modal-panel {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    width: 440px;
-    max-width: 90vw;
-    box-shadow:
-        0 16px 64px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(200,163,78,0.08) inset;
-    transform: translateY(12px);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.modal-overlay.open .modal-panel {
-    transform: translateY(0);
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border);
-}
-
-.modal-title {
-    font-family: var(--font-cinema);
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--gold-light);
-    letter-spacing: 0.06em;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1.4rem;
-    cursor: pointer;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius);
-    transition: all 0.2s;
-}
-
-.modal-close:hover {
-    color: var(--text);
-    background: rgba(255,255,255,0.05);
-}
-
-.modal-body {
-    padding: 24px;
-}
-
-.api-provider-badge {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
-    background: var(--input-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: 24px;
-}
-
-.provider-icon {
-    font-size: 1.2rem;
-}
-
-.provider-name {
-    flex: 1;
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--text);
-    letter-spacing: 0.03em;
-}
-
-.provider-status {
-    font-size: 0.75rem;
-    padding: 3px 10px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.05);
-    color: var(--text-muted);
-}
-
-.provider-status.connected {
-    background: rgba(68,170,136,0.12);
-    color: #4a8;
-}
-
-.modal-body .form-group {
-    margin-bottom: 18px;
-}
-
-.modal-body .form-group label {
-    display: block;
-    font-weight: 600;
-    font-size: 0.82rem;
-    margin-bottom: 6px;
-    color: var(--text-secondary);
-    letter-spacing: 0.04em;
-}
-
-.modal-body input[type="text"],
-.modal-body input[type="password"] {
-    width: 100%;
-    padding: 11px 14px;
-    background: var(--input-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    transition: border-color 0.3s, box-shadow 0.3s;
-}
-
-.modal-body input:focus {
-    outline: none;
-    border-color: var(--gold);
-    box-shadow: 0 0 0 3px var(--gold-glow);
-}
-
-.input-pass-wrap {
-    position: relative;
-}
-
-.input-pass-wrap input {
-    padding-right: 44px;
-}
-
-.input-pass-toggle {
-    position: absolute;
-    right: 4px;
-    top: 4px;
-    bottom: 4px;
-    width: 36px;
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-    color: var(--text-secondary);
-}
-
-.input-pass-toggle:hover {
-    background: rgba(255,255,255,0.05);
-    color: var(--text);
-}
-
-.modal-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 24px;
-}
-
-.modal-actions .btn-primary {
-    flex: 1;
-}
-
-.modal-actions .btn-outline {
-    padding: 13px 20px;
-}
-
-.api-save-msg {
-    margin-top: 12px;
-    font-size: 0.82rem;
-    text-align: center;
-}
-
-.api-save-msg.success {
-    color: #4a8;
-}
-
-.api-save-msg.error {
-    color: var(--error);
 }
 
 /* ============================================================
@@ -1461,9 +1296,6 @@ main {
         width: 100%;
     }
     .cinema-spotlight { width: 95%; }
-    .api-btn-label { display: none; }
-    .api-btn { padding: 8px 10px; }
-    .modal-panel { width: 95vw; }
 }
 
 /* ============================================================
@@ -1857,8 +1689,7 @@ html.light-theme .dim-card,
 html.light-theme .card,
 html.light-theme .result-card,
 html.light-theme .ps-box-group,
-html.light-theme .ps-panel,
-html.light-theme .modal-panel {
+html.light-theme .ps-panel {
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 

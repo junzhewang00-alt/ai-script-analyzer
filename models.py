@@ -5,7 +5,7 @@ from flask_login import UserMixin
 db = SQLAlchemy()
 
 # 积分常量
-REGISTER_BONUS = 30
+REGISTER_BONUS = 200
 DAILY_SIGNIN = 5
 CREDIT_COST = {
     "full_analysis_5000": 10,

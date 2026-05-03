@@ -78,7 +78,7 @@ def create_order():
         notify_url=config["notify_url"],
     )
 
-    if result.get("return_code") == 0:
+    if result.get("return_code") != 1:
         # 不删除订单，标记为 failed 方便排查
         order.status = "failed"
         order.payjs_raw = json.dumps(result, ensure_ascii=False)
