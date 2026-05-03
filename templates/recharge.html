@@ -76,7 +76,7 @@ function createRechargeOrder() {
         btn.textContent = "💳 生成支付码";
         if (d.ok) {
             currentOrderNo = d.out_trade_no;
-            document.getElementById("pay-qrcode-img").src = d.qrcode;
+            document.getElementById("pay-qrcode-img").src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(d.code_url);
             document.getElementById("pay-amount-text").textContent = d.amount_yuan;
             document.getElementById("pay-qrcode-wrap").style.display = "flex";
             document.getElementById("recharge-grid").style.opacity = "0.5";
