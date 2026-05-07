@@ -5,15 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 短剧剧本分析器</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
 <body>
-    <!-- 动态电影感背景层 -->
-    <canvas id="bg-canvas"></canvas>
-    <div class="cinema-bg">
-        <div class="cinema-grain"></div>
-        <div class="cinema-vignette"></div>
-        <div class="cinema-scanline"></div>
-    </div>
+    <!-- AI 神经网络动态背景 -->
+    <canvas id="ai-bg-canvas"></canvas>
+    <div class="dot-grid"></div>
 
     <header class="header">
         <div class="container header-inner">
@@ -61,7 +58,7 @@
     </main>
     <footer class="footer">
         <div class="footer-rule"></div>
-        <p>基于大语言模型的短剧多维度分析工具 &nbsp;<span style="opacity:0.5;font-size:0.78rem;">v2.2</span></p>
+        <p>基于大语言模型的短剧多维度分析工具 &nbsp;<span style="opacity:0.5;font-size:0.78rem;">v2.3</span></p>
     </footer>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
