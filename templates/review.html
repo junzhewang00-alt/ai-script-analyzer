@@ -204,7 +204,7 @@ function _clearPollTimer() {
 // ── 页面加载：恢复最近结果 ──
 (async function() {
     try {
-        const resp = await fetch('/api/review/latest', { credentials: 'include' });
+        const resp = await fetch('/api/review/latest');
         const data = await resp.json();
         if (data.found && data.results) {
             currentJobId = data.job_id;
@@ -240,7 +240,9 @@ const dropZone = document.getElementById('upload-zone');
 dropZone.addEventListener('drop', (ev) => {
     const file = ev.dataTransfer.files[0];
     if (file && file.type.startsWith('video/')) {
-        document.getElementById('video-input').files = ev.dataTransfer.files;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById('video-input').files = dt.files;
         onVideoSelected({files: [file]});
     }
 });
@@ -281,13 +283,9 @@ async function startReview() {
     formData.append('script_text', scriptText);
 
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
         const resp = await fetch('/api/review', {
-            method: 'POST', body: formData, credentials: 'include',
-            signal: controller.signal
+            method: 'POST', body: formData
         });
-        clearTimeout(timeoutId);
         const data = await resp.json();
 
         if (!resp.ok) {
@@ -310,11 +308,7 @@ async function startReview() {
         // 开始轮询
         pollStatus();
     } catch (e) {
-        if (e.name === 'AbortError') {
-            showError('上传超时，视频文件可能过大，请尝试更小的文件');
-        } else {
-            showError('网络错误: ' + e.message);
-        }
+        showError('网络错误，请检查网络连接后重试');
         submitBtn.disabled = false;
         submitBtn.textContent = '🚀 开始审核（消耗 5 积分）';
     }
@@ -325,7 +319,7 @@ async function cancelReview() {
     if (!currentJobId) return;
     try {
         await fetch('/api/review/' + currentJobId + '/cancel', {
-            method: 'POST', credentials: 'include'
+            method: 'POST'
         });
         _stopped = true;
         _clearPollTimer();
@@ -344,7 +338,7 @@ async function pollStatus() {
     _polling = true;
 
     try {
-        const resp = await fetch('/api/review/' + currentJobId, { credentials: 'include' });
+        const resp = await fetch('/api/review/' + currentJobId);
         const data = await resp.json();
 
         const progressBar = document.getElementById('progress-bar');
@@ -548,7 +542,7 @@ function showError(msg) {
 }
 
 function updateCreditsDisplay() {
-    fetch('/api/dashboard/stats', { credentials: 'include' })
+    fetch('/api/dashboard/stats')
         .then(r => r.json())
         .then(data => {
             const badge = document.getElementById('header-credits');
