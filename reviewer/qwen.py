@@ -1,5 +1,7 @@
 """Qwen3.5-Omni 情感分析 — 阿里云百炼 API"""
 
+from __future__ import annotations
+
 import os
 import json
 import base64

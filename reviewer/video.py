@@ -1,5 +1,7 @@
 """视频处理管道 — FFmpeg 技术质量检测"""
 
+from __future__ import annotations
+
 import os
 import subprocess
 import tempfile
