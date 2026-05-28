@@ -264,6 +264,8 @@ async function startReview() {
 
     if (!videoInput.files[0]) {
         showError('请选择视频文件');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 开始审核（消耗 5 积分）';
         return;
     }
 
@@ -279,7 +281,13 @@ async function startReview() {
     formData.append('script_text', scriptText);
 
     try {
-        const resp = await fetch('/api/review', { method: 'POST', body: formData, credentials: 'include' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+        const resp = await fetch('/api/review', {
+            method: 'POST', body: formData, credentials: 'include',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         const data = await resp.json();
 
         if (!resp.ok) {
@@ -302,7 +310,11 @@ async function startReview() {
         // 开始轮询
         pollStatus();
     } catch (e) {
-        showError('网络错误: ' + e.message);
+        if (e.name === 'AbortError') {
+            showError('上传超时，视频文件可能过大，请尝试更小的文件');
+        } else {
+            showError('网络错误: ' + e.message);
+        }
         submitBtn.disabled = false;
         submitBtn.textContent = '🚀 开始审核（消耗 5 积分）';
     }
