@@ -120,6 +120,7 @@ body::before {
     width: 280px;
     min-width: 280px;
     height: 100vh;
+    position: relative;
     background:
         radial-gradient(ellipse 100% 40% at 50% 0%, rgba(129, 140, 248, 0.06), transparent 60%),
         rgba(13, 13, 18, 0.92);
@@ -503,6 +504,117 @@ body::before {
 
 .sidebar-theme-btn:hover {
     background: rgba(255,255,255,0.05);
+}
+
+/* ── Sidebar Toggle Button ── */
+.sidebar-toggle {
+    position: absolute;
+    top: 50%;
+    right: -10px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 32px;
+    background: rgba(22, 22, 28, 0.95);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: 8px;
+    cursor: pointer;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition:
+        background 0.3s ease,
+        color 0.3s ease,
+        right 0.45s cubic-bezier(0.25, 0.1, 0.25, 1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+.sidebar-toggle:hover {
+    background: rgba(45, 45, 55, 0.95);
+    color: #fff;
+    border-color: rgba(129, 140, 248, 0.5);
+}
+.sidebar-toggle svg {
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sidebar.collapsed .sidebar-toggle {
+    right: -14px;
+}
+.sidebar.collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+}
+
+/* ── Sidebar Collapsed State (Apple spring) ── */
+.sidebar {
+    transition:
+        width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+        min-width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sidebar.collapsed {
+    width: 64px;
+    min-width: 64px;
+}
+.sidebar.collapsed .sidebar-logo {
+    justify-content: center;
+    padding: 20px 8px 16px;
+}
+.sidebar.collapsed .logo-text {
+    display: none;
+}
+.sidebar.collapsed .logo-icon {
+    font-size: 1.4rem;
+}
+
+/* Collapsed nav: icon-only */
+.sidebar.collapsed .sidebar-nav {
+    padding: 12px 8px;
+    align-items: center;
+}
+.sidebar.collapsed .sidebar-link {
+    justify-content: center;
+    padding: 12px 0;
+    border-radius: 12px;
+}
+.sidebar.collapsed .sidebar-link span:not(.sidebar-link-icon) {
+    display: none;
+}
+.sidebar.collapsed .sidebar-link-icon {
+    font-size: 1.2rem;
+}
+
+/* Collapsed chat: hidden */
+.sidebar.collapsed .sidebar-chat {
+    display: none;
+}
+
+/* Collapsed footer: icon-only */
+.sidebar.collapsed .sidebar-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 8px;
+}
+.sidebar.collapsed .sidebar-credits {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.7rem;
+    padding: 4px;
+    text-decoration: none;
+}
+.sidebar.collapsed .sidebar-credits span:not(:first-child) {
+    display: none;
+}
+.sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+.sidebar.collapsed .sidebar-user {
+    justify-content: center;
+}
+.sidebar.collapsed .sidebar-logout {
+    display: none;
 }
 
 /* ── Main Content ── */
