@@ -140,9 +140,12 @@ class QwenAnalyzer:
                     text = choices[0].get("message", {}).get("content", "")
                     # 尝试解析 JSON
                     try:
-                        parsed = json.loads(
-                            text.strip().removeprefix("```json").removesuffix("```").strip()
-                        )
+                        text = text.strip()
+                        if text.startswith("```json"):
+                            text = text[7:]
+                        if text.endswith("```"):
+                            text = text[:-3]
+                        parsed = json.loads(text.strip())
                         return {
                             "issues": parsed.get("issues", []),
                             "summary": parsed.get("summary", text[:500]),

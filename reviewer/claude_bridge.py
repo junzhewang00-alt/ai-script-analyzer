@@ -155,7 +155,11 @@ class ClaudeBridge:
 
         try:
             clean = (output or "").strip()
-            clean = clean.removeprefix("```json").removesuffix("```").strip()
+            if clean.startswith("```json"):
+                clean = clean[7:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
             parsed = json.loads(clean)
             return {
                 "overall_score": int(parsed.get("overall_score", 50)),
