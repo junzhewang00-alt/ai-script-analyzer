@@ -909,12 +909,13 @@ def api_create_review():
         _deduct_credits(REVIEW_COST,
                         f"视频审核: {video_file.filename[:30]}",
                         user_id=current_user.id)
-    except Exception as e:
+    except Exception:
+        _log(f"[review] credit deduction failed for user {current_user.id}")
         db.session.delete(job)
         db.session.commit()
         if video_path.exists():
             video_path.unlink()
-        return jsonify({"error": f"积分扣除失败: {e}"}), 500
+        return jsonify({"error": "积分扣除失败，请稍后重试"}), 500
 
     # 启动后台审核线程
     cancel_event = threading.Event()

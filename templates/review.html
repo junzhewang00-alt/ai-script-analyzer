@@ -162,6 +162,9 @@
         🚀 开始审核（消耗 5 积分）
     </button>
     <div style="display:flex;gap:12px;margin-top:8px">
+        <button class="btn-clear" id="cancel-btn" style="display:none" onclick="cancelReview()">
+            ⏹️ 取消审核
+        </button>
         <span id="last-job-label" style="display:none;color:#64748b;font-size:0.8rem;padding:6px 0">
             已加载上次审核结果
         </span>
@@ -191,6 +194,8 @@
 <script>
 let currentJobId = null;
 let pollTimer = null;
+let _polling = false;
+let _stopped = false;
 
 function _clearPollTimer() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -255,6 +260,7 @@ async function startReview() {
     const scriptText = document.getElementById('script-text').value.trim();
     const errorEl = document.getElementById('error-msg');
     const submitBtn = document.getElementById('submit-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
 
     if (!videoInput.files[0]) {
         showError('请选择视频文件');
@@ -286,7 +292,9 @@ async function startReview() {
         currentJobId = data.job_id;
         document.getElementById('progress-section').style.display = 'block';
         document.getElementById('results-section').style.display = 'none';
+        document.getElementById('cancel-btn').style.display = 'inline-block';
         submitBtn.textContent = '⏳ 分析中...';
+        submitBtn.disabled = true;
 
         // 更新积分
         updateCreditsDisplay();
@@ -300,9 +308,23 @@ async function startReview() {
     }
 }
 
+// ── 取消审核 ──
+async function cancelReview() {
+    if (!currentJobId) return;
+    try {
+        await fetch('/api/review/' + currentJobId + '/cancel', {
+            method: 'POST', credentials: 'include'
+        });
+        _stopped = true;
+        _clearPollTimer();
+        document.getElementById('progress-text').textContent = '⏹️ 已取消';
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('submit-btn').textContent = '🚀 开始审核（消耗 5 积分）';
+        document.getElementById('cancel-btn').style.display = 'none';
+    } catch(e) {}
+}
+
 // ── 轮询状态 ──
-let _polling = false;
-let _stopped = false;
 
 async function pollStatus() {
     if (!currentJobId) return;
@@ -317,10 +339,12 @@ async function pollStatus() {
         const progressText = document.getElementById('progress-text');
         const results = data.results || {};
         const dims = ['tech', 'dialogue', 'emotion'];
+        const dimLabels = { tech: '技术质量检测', dialogue: '台词比对', emotion: '情感分析' };
         const completed = dims.filter(d => results[d] && Object.keys(results[d]).length > 0).length;
+        const currentDim = dims[completed] || 'summary';
 
         progressBar.style.width = (completed / 3 * 100) + '%';
-        progressText.textContent = `已完成 ${completed}/3 个维度…`;
+        progressText.textContent = `正在执行: ${dimLabels[currentDim] || '汇总评审'} (${completed}/3)`;
 
         if (data.status === 'completed' || data.summary) {
             _stopped = true;
@@ -329,6 +353,7 @@ async function pollStatus() {
             progressText.textContent = '✅ 审核完成';
             document.getElementById('submit-btn').disabled = false;
             document.getElementById('submit-btn').textContent = '🔄 重新审核';
+            document.getElementById('cancel-btn').style.display = 'none';
             renderResults(data);
             document.getElementById('last-job-label').style.display = 'inline';
             document.getElementById('clear-btn').style.display = 'inline-block';
@@ -339,6 +364,7 @@ async function pollStatus() {
             showError('审核过程出现错误，请重试');
             document.getElementById('submit-btn').disabled = false;
             document.getElementById('submit-btn').textContent = '🔄 重新审核';
+            document.getElementById('cancel-btn').style.display = 'none';
         }
     } catch (e) {
         // 忽略轮询错误，继续重试
@@ -510,11 +536,15 @@ function showError(msg) {
 }
 
 function updateCreditsDisplay() {
-    const badge = document.getElementById('header-credits');
-    if (badge) {
-        const current = parseInt(badge.textContent) || 0;
-        badge.textContent = current - 5;
-    }
+    fetch('/api/dashboard/stats', { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('header-credits');
+            if (badge && data.kpis && data.kpis.credits != null) {
+                badge.textContent = data.kpis.credits;
+            }
+        })
+        .catch(() => {});
 }
 </script>
 {% endblock %}

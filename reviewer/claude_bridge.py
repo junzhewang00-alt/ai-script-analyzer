@@ -105,8 +105,11 @@ class ClaudeBridge:
         """
         # 提取关键信息，避免 token 过长
         summary_data = {}
+        skipped_dims = []
         for dim in ("tech", "dialogue", "emotion"):
             data = all_results.get(dim, {})
+            if data.get("_fallback") or data.get("_note"):
+                skipped_dims.append(dim)
             if dim == "tech":
                 summary_data["tech"] = {
                     "all_acceptable": data.get("all_acceptable", True),
@@ -126,10 +129,14 @@ class ClaudeBridge:
                 }
 
         result_text = json.dumps(summary_data, ensure_ascii=False, indent=2)
+        skipped_note = ""
+        if skipped_dims:
+            dim_cn = {"tech": "技术质量", "dialogue": "台词匹配", "emotion": "情感分析"}
+            skipped_note = "\n\n⚠️ 以下维度因配置缺失已跳过，不计入评分: " + ", ".join(dim_cn.get(d, d) for d in skipped_dims)
 
         prompt = (
             "请根据以下审核数据给出综合评分（0-100）、审核意见和是否通过。\n\n"
-            f"{result_text[:3000]}\n\n"
+            f"{result_text[:3000]}{skipped_note}\n\n"
             "输出 JSON（不要 markdown 代码块）：\n"
             '{"overall_score": 整数, "opinion": "综合评审意见", "passed": true/false}'
         )
