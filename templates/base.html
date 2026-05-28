@@ -3,78 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 短剧剧本分析器</title>
+    <title>{% block title %}AI 短剧剧本分析器{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    {% block head_extra %}{% endblock %}
 </head>
-<body>
-    <!-- AI 神经网络动态背景 -->
+<body class="app-layout">
+    <!-- Liquid Glass SVG Filter -->
+    <svg style="display:none" aria-hidden="true">
+        <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/>
+            <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/>
+            <feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight">
+                <fePointLight x="-200" y="-200" z="300"/>
+            </feSpecularLighting>
+            <feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/>
+            <feDisplacementMap in="SourceGraphic" in2="softMap" scale="20" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+    </svg>
     <canvas id="ai-bg-canvas"></canvas>
-    <div class="dot-grid"></div>
+    <div id="toast-container" class="toast-container"></div>
 
-    <header class="header">
-        <div class="container header-inner">
-            <a href="/" class="logo">
-                <span class="logo-icon">🎬</span>
-                <span class="logo-text">AI 短剧剧本分析器</span>
-            </a>
-            <div class="header-actions">
-                <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="切换深色/浅色模式">
-                    🌙
-                </button>
-                {% if current_user.is_authenticated %}
-                <a href="/pay/recharge" class="btn btn-primary btn-sm" title="充值积分">+ 充值</a>
-                <a href="/dashboard" class="credits-badge" title="查看积分记录">
-                    💰 <span id="header-credits">{{ current_user.credits }}</span>
-                </a>
-                <div class="user-dropdown">
-                    <button class="user-menu-btn" onclick="this.parentElement.classList.toggle('open')">
-                        {{ current_user.display_name }} ▾
-                    </button>
-                    <div class="user-dropdown-menu">
-                        <a href="/dashboard">积分面板</a>
-                        <a href="/auth/logout">退出登录</a>
-                    </div>
-                </div>
-                {% else %}
-                <a href="/auth/login" class="btn btn-outline btn-sm">登录</a>
-                <a href="/auth/register" class="btn btn-primary btn-sm">注册</a>
-                {% endif %}
-            </div>
+    <!-- rlhdr: 左侧边栏 -->
+    <aside class="sidebar">
+        <!-- Logo 区 -->
+        <div class="sidebar-logo">
+            <span class="logo-icon">🎬</span>
+            <span class="logo-text">AI 短剧分析器</span>
         </div>
-    </header>
 
-    <main class="container">
+        <!-- 导航 -->
+        <nav class="sidebar-nav">
+            <a href="/" class="sidebar-link {{ 'active' if request.path == '/' else '' }}">
+                <span class="sidebar-link-icon">📝</span>
+                <span>剧本分析</span>
+            </a>
+            <a href="/review" class="sidebar-link {{ 'active' if request.path.startswith('/review') else '' }}">
+                <span class="sidebar-link-icon">🎥</span>
+                <span>视频审核</span>
+            </a>
+            <a href="/prompts" class="sidebar-link {{ 'active' if request.path == '/prompts' else '' }}">
+                <span class="sidebar-link-icon">🔧</span>
+                <span>提示词工坊</span>
+            </a>
+            <a href="/dashboard" class="sidebar-link {{ 'active' if request.path == '/dashboard' else '' }}">
+                <span class="sidebar-link-icon">📊</span>
+                <span>积分面板</span>
+            </a>
+        </nav>
+
+        <!-- rlhdr: AI 对话 -->
+        <div class="sidebar-chat">
+            <div class="chat-header">
+                <span class="chat-dot"></span>
+                AI 助手
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-msg assistant">
+                    <span>你好！我是 AI 短剧分析助手。可以直接问我剧本相关的问题。</span>
+                </div>
+            </div>
+
+            <!-- PromptInputBox 复刻 -->
+            <div class="prompt-box" id="chat-prompt-box">
+                <div class="prompt-inner">
+                    <textarea
+                        id="chat-input"
+                        class="prompt-textarea"
+                        placeholder="输入消息…"
+                        rows="1"
+                    ></textarea>
+                </div>
+                <div class="prompt-actions">
+                    <div class="prompt-left">
+                        <button class="prompt-btn" title="上传图片" onclick="document.getElementById('chat-file-input').click()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <input type="file" id="chat-file-input" accept="image/*" class="hidden-input" onchange="handleChatFile(this)">
+                    </div>
+                    <button class="prompt-send" id="chat-send-btn" onclick="sendChatMessage()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-hint">Enter 发送 · Shift+Enter 换行</div>
+        </div>
+
+        <!-- 底部用户区 -->
+        <div class="sidebar-footer">
+            {% if current_user.is_authenticated %}
+            <a href="/pay/recharge" class="sidebar-credits" title="充值积分">
+                <span>💰</span>
+                <span id="header-credits">{{ current_user.credits }}</span>
+                <span style="font-size:0.75rem;color:#64748b">积分</span>
+            </a>
+            <div class="sidebar-user">
+                <div class="sidebar-user-avatar">{{ current_user.display_name[0] | upper }}</div>
+                <div class="sidebar-user-info">
+                    <div class="sidebar-user-name">{{ current_user.display_name }}</div>
+                    <a href="/auth/logout" class="sidebar-logout">退出</a>
+                </div>
+            </div>
+            {% else %}
+            <a href="/auth/login" class="sidebar-link">登录</a>
+            <a href="/auth/register" class="sidebar-link">注册</a>
+            {% endif %}
+            <button class="sidebar-theme-btn" onclick="toggleTheme()" title="切换主题">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages">
             {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message|safe }}</div>
+            <div class="flash flash-{{ category }}">{{ message }}</div>
             {% endfor %}
         </div>
         {% endif %}
         {% endwith %}
         {% block content %}{% endblock %}
     </main>
-    <footer class="footer">
-        <div class="footer-rule"></div>
-        <p>基于大语言模型的短剧多维度分析工具 &nbsp;<span style="opacity:0.5;font-size:0.78rem;">v2.3</span></p>
-    </footer>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
+    // Toast helper
+    function showToast(msg, type) {
+        type = type || "error";
+        var container = document.getElementById("toast-container");
+        var el = document.createElement("div");
+        el.className = "toast toast-" + type;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(function() { el.remove(); }, 3600);
+    }
+
     // Theme toggle
     (function() {
         var saved = localStorage.getItem("theme");
         if (saved === "light") {
             document.documentElement.classList.add("light-theme");
-            document.getElementById("theme-toggle-btn").textContent = "☀️";
+            document.getElementById("theme-icon").textContent = "☀️";
         }
     })();
     function toggleTheme() {
         var isLight = document.documentElement.classList.toggle("light-theme");
         localStorage.setItem("theme", isLight ? "light" : "dark");
-        document.getElementById("theme-toggle-btn").textContent = isLight ? "☀️" : "🌙";
+        document.getElementById("theme-icon").textContent = isLight ? "☀️" : "🌙";
+    }
+
+    // ── AI Chat ──
+    var chatInput = document.getElementById("chat-input");
+    var chatMessages = document.getElementById("chat-messages");
+    var chatSendBtn = document.getElementById("chat-send-btn");
+
+    // 自动高度
+    chatInput.addEventListener("input", function() {
+        this.style.height = "auto";
+        this.style.height = Math.min(this.scrollHeight, 120) + "px";
+    });
+
+    // Enter 发送, Shift+Enter 换行
+    chatInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+
+    function sendChatMessage() {
+        var text = chatInput.value.trim();
+        if (!text) return;
+
+        // 用户消息
+        addChatMsg("user", text);
+        chatInput.value = "";
+        chatInput.style.height = "auto";
+
+        // 调用 API
+        addChatMsg("assistant", '<span class="chat-typing">思考中…</span>');
+        var typingEl = chatMessages.lastElementChild;
+
+        fetch("/api/chat", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({message: text}),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (typingEl) typingEl.remove();
+            addChatMsg("assistant", data.reply || "抱歉，暂时无法回复。");
+        })
+        .catch(function() {
+            if (typingEl) typingEl.remove();
+            addChatMsg("assistant", "网络错误，请重试。");
+        });
+    }
+
+    function addChatMsg(role, html) {
+        var div = document.createElement("div");
+        div.className = "chat-msg " + role;
+        div.innerHTML = html;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function handleChatFile(input) {
+        if (input.files && input.files[0]) {
+            addChatMsg("user", '[图片: ' + input.files[0].name + ']');
+        }
+        input.value = "";
     }
     </script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

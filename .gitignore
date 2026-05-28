@@ -13,3 +13,5 @@ example_result.html
 .jobs/
 instance/
 *.db
+uploads/
+server.log

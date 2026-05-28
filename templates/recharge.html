@@ -6,11 +6,25 @@
         <p>当前积分: <strong id="current-credits">{{ current_user.credits }}</strong></p>
     </div>
 
-    {% if not configured %}
+    {% if not stripe_configured and not payjs_configured %}
     <div class="flash flash-error" style="max-width:500px;margin:0 auto 24px;">
-        支付接口未配置，请在 <code>.env</code> 中设置 <code>STRIPE_SECRET_KEY</code>、<code>STRIPE_PUBLISHABLE_KEY</code>
+        支付接口未配置，请在 <code>.env</code> 中设置 PayJS 或 Stripe 参数
     </div>
     {% endif %}
+
+    <!-- 支付方式切换 -->
+    <div class="channel-tabs" id="channel-tabs">
+        {% if payjs_configured %}
+        <button class="channel-tab active" data-channel="payjs" onclick="switchChannel('payjs')">
+            微信/支付宝扫码
+        </button>
+        {% endif %}
+        {% if stripe_configured %}
+        <button class="channel-tab {% if not payjs_configured %}active{% endif %}" data-channel="stripe" onclick="switchChannel('stripe')">
+            银行卡
+        </button>
+        {% endif %}
+    </div>
 
     <div class="recharge-grid" id="recharge-grid">
         {% for pkg in packages %}
@@ -29,11 +43,28 @@
     </div>
 
     <div class="recharge-action" id="recharge-action">
-        <button class="btn btn-primary btn-lg" id="btn-create" onclick="startPayment()">
-            💳 去支付
-        </button>
+        <button class="btn btn-primary btn-lg" id="btn-create" onclick="startPayment()">去支付</button>
     </div>
 
+    <!-- PayJS 扫码支付弹窗 -->
+    <div class="pay-qrcode-wrap" id="pay-qrcode-wrap" style="display:none;">
+        <div class="pay-qrcode-card">
+            <div class="pay-qrcode-header">
+                <span>扫码支付</span>
+                <button class="modal-close" onclick="closeQRCode()">&times;</button>
+            </div>
+            <div class="pay-qrcode-body">
+                <div id="qrcode-container" style="display:inline-block;"></div>
+                <div class="pay-amount-text">支付 <strong id="qrcode-amount-text"></strong> 元</div>
+                <div class="pay-hint">请使用微信或支付宝扫码支付</div>
+                <div class="pay-status" id="qrcode-status">
+                    <span class="pay-status-icon">⏳</span> 等待支付中...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stripe 银行卡支付弹窗 -->
     <div class="pay-card-wrap" id="pay-card-wrap" style="display:none;">
         <div class="pay-card-modal">
             <div class="pay-card-header">
@@ -44,7 +75,7 @@
                 <p class="pay-amount-text">支付 <strong id="pay-amount-text"></strong> 元</p>
                 <div id="payment-element"></div>
                 <button id="btn-submit" class="btn btn-primary btn-block" style="margin-top:16px;">
-                    确认支付 ¥<span id="btn-amount"></span>
+                    确认支付 <span id="btn-amount"></span> 元
                 </button>
                 <div id="pay-message" class="pay-message"></div>
             </div>
@@ -52,12 +83,26 @@
     </div>
 </div>
 
+{% if stripe_configured %}
 <script src="https://js.stripe.com/v3/"></script>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
+var currentChannel = "{{ 'payjs' if payjs_configured else 'stripe' }}";
+{% if stripe_configured %}
 var stripe = Stripe("{{ stripe_publishable_key }}");
+{% endif %}
 var elements;
 var currentClientSecret = null;
 var currentAmountYuan = 0;
+var pollTimer = null;
+
+function switchChannel(channel) {
+    currentChannel = channel;
+    document.querySelectorAll(".channel-tab").forEach(function(t) {
+        t.classList.toggle("active", t.dataset.channel === channel);
+    });
+}
 
 function startPayment() {
     var selected = document.querySelector('input[name="amount"]:checked');
@@ -71,31 +116,97 @@ function startPayment() {
     fetch("/pay/create", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({amount_yuan: currentAmountYuan})
+        body: JSON.stringify({amount_yuan: currentAmountYuan, channel: currentChannel})
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
         btn.disabled = false;
-        btn.textContent = "💳 去支付";
-        if (d.ok) {
-            currentClientSecret = d.clientSecret;
-            document.getElementById("pay-amount-text").textContent = d.amount_yuan;
-            document.getElementById("btn-amount").textContent = d.amount_yuan;
-            document.getElementById("pay-card-wrap").style.display = "flex";
-            document.getElementById("recharge-grid").style.opacity = "0.5";
-            document.getElementById("recharge-action").style.display = "none";
-            document.getElementById("pay-message").textContent = "";
-            document.getElementById("btn-submit").disabled = false;
-            setupStripeElements();
-        } else {
+        btn.textContent = "去支付";
+        if (!d.ok) {
             alert(d.error || "创建订单失败");
+            return;
+        }
+        if (d.channel === "payjs") {
+            showQRCode(d);
+        } else {
+            showCardModal(d);
         }
     })
     .catch(function() {
         btn.disabled = false;
-        btn.textContent = "💳 去支付";
+        btn.textContent = "去支付";
         alert("网络错误，请重试");
     });
+}
+
+// ==================== PayJS QR Code ====================
+
+function showQRCode(d) {
+    document.getElementById("qrcode-amount-text").textContent = d.amount_yuan;
+    document.getElementById("qrcode-status").innerHTML =
+        '<span class="pay-status-icon">⏳</span> 等待支付中...';
+    document.getElementById("pay-qrcode-wrap").style.display = "flex";
+    document.getElementById("recharge-grid").style.opacity = "0.5";
+    document.getElementById("recharge-action").style.display = "none";
+
+    var container = document.getElementById("qrcode-container");
+    container.innerHTML = "";
+    new QRCode(container, {
+        text: d.code_url,
+        width: 220,
+        height: 220,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+    });
+
+    startPolling(d.out_trade_no);
+}
+
+function closeQRCode() {
+    document.getElementById("pay-qrcode-wrap").style.display = "none";
+    document.getElementById("recharge-grid").style.opacity = "1";
+    document.getElementById("recharge-action").style.display = "block";
+    stopPolling();
+}
+
+function startPolling(outTradeNo) {
+    stopPolling();
+    pollTimer = setInterval(function() {
+        fetch("/pay/status/" + outTradeNo)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.status === "paid") {
+                    stopPolling();
+                    document.getElementById("qrcode-status").innerHTML =
+                        '<span class="pay-status-icon" style="color:#27ae60">&#10004;</span> 支付成功！积分已到账';
+                    var headerCredits = document.getElementById("header-credits");
+                    if (headerCredits) headerCredits.textContent = d.credits;
+                    setTimeout(function() { location.reload(); }, 1500);
+                }
+            });
+    }, 2000);
+}
+
+function stopPolling() {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+}
+
+// ==================== Stripe Card ====================
+
+function showCardModal(d) {
+    currentClientSecret = d.clientSecret;
+    document.getElementById("pay-amount-text").textContent = d.amount_yuan;
+    document.getElementById("btn-amount").textContent = d.amount_yuan;
+    document.getElementById("pay-card-wrap").style.display = "flex";
+    document.getElementById("recharge-grid").style.opacity = "0.5";
+    document.getElementById("recharge-action").style.display = "none";
+    document.getElementById("pay-message").textContent = "";
+    document.getElementById("btn-submit").disabled = false;
+    setupStripeElements();
 }
 
 function setupStripeElements() {
@@ -126,9 +237,8 @@ document.getElementById("btn-submit").addEventListener("click", function() {
             document.getElementById("pay-message").innerHTML =
                 '<span style="color:#e74c3c">' + result.error.message + "</span>";
             btn.disabled = false;
-            btn.textContent = "确认支付 ¥" + currentAmountYuan;
+            btn.textContent = "确认支付 " + currentAmountYuan + " 元";
         } else {
-            // 支付成功，服务端确认
             confirmOnServer(result.paymentIntent.id);
         }
     });

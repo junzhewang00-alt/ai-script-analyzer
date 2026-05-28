@@ -4,6 +4,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from models import db, User, CreditLog, REGISTER_BONUS, DAILY_SIGNIN
+from limiter import _limiter
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -13,10 +14,15 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
     if request.method == "POST":
+        ip = request.remote_addr or "127.0.0.1"
         email = request.form.get("email", "").strip().lower()
+        if not _limiter.is_allowed(f"rl:/auth/login:{ip}:{email}", 10, 60):
+            flash("请求过于频繁，请稍后再试", "error")
+            return render_template("login.html")
         password = request.form.get("password", "")
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password_hash, password):
+            _limiter.is_allowed(f"rl:/auth/login:{ip}:{email}", 0, 1)  # reset on success
             login_user(user, remember=request.form.get("remember") == "1")
             flash("登录成功", "success")
             next_url = request.args.get("next")
@@ -30,7 +36,11 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
     if request.method == "POST":
+        ip = request.remote_addr or "127.0.0.1"
         email = request.form.get("email", "").strip().lower()
+        if not _limiter.is_allowed(f"rl:/auth/register:{ip}:{email}", 5, 300):
+            flash("请求过于频繁，请稍后再试", "error")
+            return render_template("register.html")
         password = request.form.get("password", "")
         nickname = request.form.get("nickname", "").strip()
 
@@ -76,6 +86,10 @@ def signin():
     today = date.today()
     if current_user.last_signin_date == today:
         return jsonify({"ok": False, "error": "今日已签到"}), 400
+
+    ip = request.remote_addr or "127.0.0.1"
+    if not _limiter.is_allowed(f"rl:/auth/signin:{ip}", 20, 60):
+        return jsonify({"error": "请求过于频繁，请稍后再试"}), 429
 
     current_user.last_signin_date = today
     current_user.credits += DAILY_SIGNIN

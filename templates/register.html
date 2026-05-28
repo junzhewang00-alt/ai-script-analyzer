@@ -1,44 +1,86 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="auth-page">
-    <div class="auth-card">
-        <div class="auth-header">
-            <h2>注册</h2>
-            <p>注册即送 200 积分，免费体验 3 次分析</p>
-        </div>
-        <form method="POST" action="{{ url_for('auth.register') }}">
-            <div class="form-group">
-                <label for="email">邮箱</label>
-                <input type="email" id="email" name="email" required placeholder="your@email.com" autofocus>
-            </div>
-            <div class="form-group">
-                <label for="nickname">昵称 <span class="field-optional">选填</span></label>
-                <input type="text" id="nickname" name="nickname" placeholder="如何称呼你？">
-            </div>
-            <div class="form-group">
-                <label for="password">密码</label>
-                <input type="password" id="password" name="password" required placeholder="至少6位">
-            </div>
-            <div class="form-group">
-                <label for="confirm">确认密码</label>
-                <input type="password" id="confirm" name="confirm" placeholder="再次输入密码">
-            </div>
-            <button type="submit" class="btn btn-primary btn-block">注册</button>
-        </form>
-        <div class="auth-footer">
-            已有账号？<a href="{{ url_for('auth.login') }}">登录</a>
-        </div>
-    </div>
-</div>
+{% extends "auth_base.html" %}
 
-<script>
-document.querySelector('form').addEventListener('submit', function(e) {
-    var pw = document.getElementById('password').value;
-    var cf = document.getElementById('confirm').value;
-    if (pw !== cf) {
-        e.preventDefault();
-        alert('两次密码输入不一致');
+{% block title %}注册{% endblock %}
+
+{% block nav_link %}
+<a href="{{ url_for('auth.login') }}" class="liquid-glass rounded-full px-5 py-2 text-xs font-medium text-white/90 font-body">登录</a>
+{% endblock %}
+
+{% block heading %}加入我们{% endblock %}
+
+{% block subtitle %}注册即送 <span class="text-white font-medium">200</span> 积分，免费体验分析{% endblock %}
+
+{% block form %}
+<form method="POST" action="{{ url_for('auth.register') }}" id="register-form" class="mt-8 space-y-4 anim-in delay-750">
+  <div>
+    <label for="email" class="text-white/50 text-[11px] font-body uppercase tracking-widest mb-1.5 block">邮箱</label>
+    <input type="email" id="email" name="email" required placeholder="your@email.com"
+           class="login-input" autocomplete="email" autofocus>
+  </div>
+  <div>
+    <label for="nickname" class="text-white/50 text-[11px] font-body uppercase tracking-widest mb-1.5 block">昵称 <span style="opacity:0.4;font-weight:300;">选填</span></label>
+    <input type="text" id="nickname" name="nickname" placeholder="如何称呼你？"
+           class="login-input" autocomplete="name">
+  </div>
+  <div>
+    <label for="password" class="text-white/50 text-[11px] font-body uppercase tracking-widest mb-1.5 block">密码</label>
+    <input type="password" id="password" name="password" required placeholder="至少6位"
+           class="login-input" autocomplete="new-password">
+  </div>
+  <div>
+    <label for="confirm" class="text-white/50 text-[11px] font-body uppercase tracking-widest mb-1.5 block">确认密码</label>
+    <input type="password" id="confirm" name="confirm" placeholder="再次输入密码"
+           class="login-input" autocomplete="new-password">
+  </div>
+  <div class="pt-1">
+    <button type="submit" class="login-btn inline-flex items-center justify-center gap-2">
+      注 册
+      <svg class="h-4 w-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+      </svg>
+    </button>
+  </div>
+</form>
+{% endblock %}
+
+{% block links_justify %}justify-center{% endblock %}
+
+{% block bottom_links %}
+<a href="{{ url_for('auth.login') }}" class="login-link">已有账号？登录</a>
+{% endblock %}
+
+{% block footer_text %}安全注册 · 256位加密{% endblock %}
+
+{% block extra_js %}
+  // ── Client-side password confirmation ──
+  var form = document.getElementById('register-form');
+  form.addEventListener('submit', function(e) {
+    var pw = document.getElementById('password');
+    var cf = document.getElementById('confirm');
+    if (pw.value !== cf.value) {
+      e.preventDefault();
+      cf.classList.add('error');
+      var container = document.getElementById('flash-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'flash-container';
+        document.body.appendChild(container);
+      }
+      var toast = document.createElement('div');
+      toast.className = 'flash-toast flash-error';
+      toast.textContent = '两次密码输入不一致';
+      toast.style.top = '5rem';
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.4s ease';
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
+      }, 3000);
     }
-});
-</script>
+  });
+
+  // Clear error state on input
+  document.getElementById('confirm').addEventListener('input', function() {
+    this.classList.remove('error');
+  });
 {% endblock %}

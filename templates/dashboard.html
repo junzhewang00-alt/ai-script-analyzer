@@ -1,35 +1,88 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="dashboard">
-    <div class="dash-header">
+<div class="dashboard-v2">
+    <div class="dash-hero">
         <h2>用户面板</h2>
-        <p>{{ current_user.display_name }}</p>
+        <p class="dash-hero-sub">{{ current_user.display_name }}</p>
     </div>
 
-    <div class="dash-cards">
-        <div class="dash-card dash-card-credits">
-            <div class="dash-card-icon">💰</div>
-            <div class="dash-card-val">{{ current_user.credits }}</div>
-            <div class="dash-card-label">当前积分</div>
+    <!-- KPI 概览卡片 -->
+    <div class="dash-kpi-grid" id="dash-kpi-grid">
+        <div class="dash-kpi-card dash-kpi-credits">
+            <div class="dash-kpi-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="6" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>
+            </div>
+            <div class="dash-kpi-val" id="kpi-credits">{{ current_user.credits }}</div>
+            <div class="dash-kpi-label">当前积分</div>
         </div>
-        <div class="dash-card dash-card-signin" id="signin-card">
-            <div class="dash-card-icon">📅</div>
-            <div class="dash-card-val" id="signin-status">
+        <div class="dash-kpi-card dash-kpi-analyses">
+            <div class="dash-kpi-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="12" x2="8" y2="12"/><line x1="16" y1="16" x2="8" y2="16"/></svg>
+            </div>
+            <div class="dash-kpi-val" id="kpi-analyses">-</div>
+            <div class="dash-kpi-label">分析次数</div>
+        </div>
+        <div class="dash-kpi-card dash-kpi-spent">
+            <div class="dash-kpi-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </div>
+            <div class="dash-kpi-val" id="kpi-spent">-</div>
+            <div class="dash-kpi-label">消费积分</div>
+        </div>
+        <div class="dash-kpi-card dash-kpi-earned">
+            <div class="dash-kpi-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+            </div>
+            <div class="dash-kpi-val" id="kpi-earned">-</div>
+            <div class="dash-kpi-label">获取积分</div>
+        </div>
+    </div>
+
+    <!-- 签到卡片 -->
+    <div class="dash-signin-bar" id="signin-bar">
+        <div class="dash-signin-info">
+            <span class="dash-signin-icon">📅</span>
+            <span class="dash-signin-status" id="signin-status">
                 {% if current_user.last_signin_date and current_user.last_signin_date == today %}
                 今日已签到
                 {% else %}
-                未签到
+                今日未签到
                 {% endif %}
+            </span>
+        </div>
+        <button class="btn btn-outline btn-sm" id="signin-btn" onclick="dailySignin()"
+                {% if current_user.last_signin_date and current_user.last_signin_date == today %}disabled{% endif %}>
+            +{{ signin_bonus }} 签到
+        </button>
+    </div>
+
+    <!-- 时间范围切换 + 图表区 -->
+    <div class="dash-charts-section">
+        <div class="dash-charts-header">
+            <span class="dash-charts-title">数据概览</span>
+            <div class="dash-range-tabs" id="range-tabs">
+                <button class="dash-range-btn active" data-range="7">近7天</button>
+                <button class="dash-range-btn" data-range="30">近30天</button>
+                <button class="dash-range-btn" data-range="all">全部</button>
             </div>
-            <div class="dash-card-label">
-                <button class="btn btn-sm" id="signin-btn" onclick="dailySignin()"
-                        {% if current_user.last_signin_date and current_user.last_signin_date == today %}disabled{% endif %}>
-                    +{{ signin_bonus }} 签到
-                </button>
+        </div>
+        <div class="dash-charts-grid">
+            <div class="dash-chart-card">
+                <div class="dash-chart-inner" id="chart-trend"></div>
+            </div>
+            <div class="dash-chart-card">
+                <div class="dash-chart-inner" id="chart-type"></div>
             </div>
         </div>
     </div>
 
+    <!-- 快捷操作 -->
+    <div class="dash-actions">
+        <a href="/" class="btn btn-primary">新建分析</a>
+        <a href="/pay/recharge" class="btn btn-outline">充值积分</a>
+    </div>
+
+    <!-- 消费记录 -->
     <div class="dash-section">
         <h3>消费记录</h3>
         {% if logs %}
@@ -38,6 +91,7 @@
                 <thead>
                     <tr>
                         <th>时间</th>
+                        <th>类型</th>
                         <th>说明</th>
                         <th>变动</th>
                         <th>余额</th>
@@ -47,9 +101,12 @@
                     {% for l in logs %}
                     <tr>
                         <td>{{ l.created_at.strftime('%m-%d %H:%M') }}</td>
-                        <td>{{ l.description or l.type }}</td>
+                        <td>
+                            <span class="log-type-badge">{{ l.type }}</span>
+                        </td>
+                        <td>{{ l.description or '-' }}</td>
                         <td class="{{ 'credit-plus' if l.amount > 0 else 'credit-minus' }}">
-                            {{ '+' if l.amount > 0 else '' }}{{ l.amount }}
+                            {{ '{:+}'.format(l.amount) }}
                         </td>
                         <td>{{ l.balance_after }}</td>
                     </tr>
@@ -65,6 +122,7 @@
 
 <script>
 var SIGNIN_BONUS = {{ signin_bonus }};
+var DASH_USER = "{{ current_user.display_name }}";
 
 function dailySignin() {
     var btn = document.getElementById("signin-btn");
@@ -76,7 +134,7 @@ function dailySignin() {
             if (d.ok) {
                 document.getElementById("signin-status").textContent = "今日已签到";
                 btn.textContent = "已签到 ✓";
-                document.querySelector(".dash-card-credits .dash-card-val").textContent = d.credits;
+                document.getElementById("kpi-credits").textContent = d.credits;
             } else {
                 btn.disabled = true;
                 btn.textContent = "已签到";

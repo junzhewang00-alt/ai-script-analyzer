@@ -10,24 +10,26 @@ API_BASE = os.getenv("LLM_API_BASE", "")
 API_KEY = os.getenv("LLM_API_KEY", "")
 MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 
-_client = None
-_client_config = None
+# 线程安全的客户端缓存
+_cache_lock = threading.Lock()
+_cache: dict[tuple, OpenAI] = {}
 
 
 def _get_client(api_base=None, api_key=None):
-    global _client, _client_config
-    key = (api_base, api_key)
-    if key == _client_config and _client is not None:
-        return _client
-    if not api_key or not api_base:
-        if not API_KEY or not API_BASE:
-            raise RuntimeError("请先配置 API 接口信息")
-        _client_config = (API_BASE, API_KEY)
-        _client = OpenAI(api_key=API_KEY, base_url=API_BASE)
-        return _client
-    _client_config = key
-    _client = OpenAI(api_key=api_key, base_url=api_base)
-    return _client
+    key = (api_base or API_BASE, api_key or API_KEY)
+    if not key[0] or not key[1]:
+        raise RuntimeError("请先配置 API 接口信息")
+
+    if key in _cache:
+        return _cache[key]
+
+    with _cache_lock:
+        # 双重检查
+        if key in _cache:
+            return _cache[key]
+        client = OpenAI(api_key=key[1], base_url=key[0])
+        _cache[key] = client
+        return client
 
 
 def get_config():

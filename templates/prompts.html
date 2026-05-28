@@ -1,171 +1,149 @@
 {% extends "base.html" %}
+{% block head_extra %}
+<style>
+    .ops-studio { display: flex; flex-direction: column; gap: 20px; height: calc(100vh - 64px); }
+    .ops-toolbar { display: flex; align-items: center; gap: 12px; padding: 0; flex-shrink: 0; }
+    .ops-toolbar .toolbar-spacer { flex: 1; }
+    .ops-toolbar .toolbar-btn { padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #94a3b8; font-size: 0.82rem; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s; }
+    .ops-toolbar .toolbar-btn:hover { border-color: rgba(255,255,255,0.15); color: #e2e8f0; }
+    .ops-toolbar .toolbar-btn.accent { border-color: rgba(129,140,248,0.3); color: #818cf8; }
+    .ops-toolbar .toolbar-btn.accent:hover { background: rgba(129,140,248,0.1); }
+    .ops-workspaces { flex: 1; display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; min-height: 0; }
+    .ops-workspace { flex: 1; min-width: 320px; display: flex; flex-direction: column; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; backdrop-filter: blur(12px); box-shadow: 0 4px 24px rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.04); overflow: hidden; }
+    .ops-ws-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); gap: 8px; flex-shrink: 0; }
+    .ops-ws-title { font-weight: 600; font-size: 0.85rem; color: #e2e8f0; flex: 1; }
+    .ops-ws-copy { padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: #64748b; font-size: 0.72rem; cursor: pointer; transition: all 0.2s; }
+    .ops-ws-copy:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.2); }
+    .ops-ws-body { flex: 1; display: flex; flex-direction: column; padding: 12px; min-height: 0; }
+    .ops-prompt-area { flex: 1; position: relative; min-height: 0; }
+    .ops-prompt-area textarea { width: 100%; height: 100%; min-height: 160px; resize: none; background: transparent; border: none; outline: none; color: #e2e8f0; font-size: 0.9rem; line-height: 1.7; font-family: 'SF Mono','Cascadia Code','Consolas',monospace; padding: 0; }
+    .ops-prompt-area textarea::placeholder { color: #475569; }
+    .ops-tags-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; flex-shrink: 0; min-height: 0; max-height: 80px; overflow-y: auto; }
+    .ops-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.2s; border: 1px solid; user-select: none; backdrop-filter: blur(4px); white-space: nowrap; }
+    .ops-chip:hover { opacity: 0.8; }
+    .ops-chip .chip-x { font-size: 0.7rem; opacity: 0.6; margin-left: 2px; }
+    .ops-panel-overlay { position: fixed; inset: 0; z-index: 99; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); display: none; }
+    .ops-panel-overlay.open { display: block; }
+    .ops-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 100; background: rgba(13,13,18,0.97); border-left: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(20px); display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); }
+    .ops-panel.open { transform: translateX(0); }
+    .ops-panel-header { display: flex; align-items: center; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+    .ops-panel-title { font-weight: 600; color: #e2e8f0; flex: 1; }
+    .ops-panel-close { background: none; border: none; color: #64748b; font-size: 1.2rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .ops-panel-close:hover { color: #ef4444; }
+    .ops-panel-search { padding: 12px 16px; flex-shrink: 0; }
+    .ops-panel-search input { width: 100%; padding: 10px 14px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: #e2e8f0; font-size: 0.85rem; outline: none; }
+    .ops-panel-search input:focus { border-color: rgba(129,140,248,0.4); }
+    .ops-panel-cats { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 8px; flex-shrink: 0; }
+    .ops-cat-btn { padding: 5px 10px; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,0.03); color: #94a3b8; font-size: 0.72rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .ops-cat-btn:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
+    .ops-cat-btn.active { border-color: rgba(129,140,248,0.3); color: #818cf8; font-weight: 600; }
+    .ops-panel-tags { flex: 1; overflow-y: auto; padding: 0 16px 16px; min-height: 0; }
+    .ops-cat-panel { display: none; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+    .ops-cat-panel.active { display: flex; }
+    .ops-tag { padding: 4px 11px; border-radius: 7px; font-size: 0.76rem; cursor: pointer; transition: all 0.15s; user-select: none; background: rgba(255,255,255,0.03); color: #94a3b8; border: 1px solid transparent; }
+    .ops-tag:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="ps-studio" id="ps-studio">
-    <!-- 左侧：文本框区域 -->
-    <div class="ps-main">
-        <div class="ps-header">
-            <a href="/" class="btn btn-outline">← 返回首页</a>
-            <h2 class="ps-title">🎨 提示词工作室</h2>
-            <button class="btn btn-primary ps-toggle-btn" id="ps-toggle-btn" onclick="togglePanel(event)">
-                📖 提示词速查
-            </button>
-        </div>
-
-        <div class="ps-boxes">
-            <div class="ps-box-group">
-                <div class="ps-box-header">
-                    <label>🇨🇳 中文提示词</label>
-                    <button class="btn-copy-sm" onclick="copyBox('ps-zh')">📋 复制</button>
-                </div>
-                <textarea id="ps-zh" class="ps-textarea" rows="5" placeholder="从右侧速查手册点击标签来添加提示词，或直接输入中文..."></textarea>
-                <div class="ps-tags" id="ps-tags-zh"></div>
-            </div>
-
-            <div class="ps-arrow">⬇️ 翻译 ⬇️</div>
-
-            <div class="ps-box-group">
-                <div class="ps-box-header">
-                    <label>🇺🇸 English Prompt <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;">（适配nanobanana）</span></label>
-                    <button class="btn-copy-sm" onclick="copyBox('ps-en')">📋 复制</button>
-                </div>
-                <textarea id="ps-en" class="ps-textarea" rows="5" placeholder="English translation will appear here..."></textarea>
-                <div class="ps-tags" id="ps-tags-en"></div>
+<div class="ops-studio">
+    <div class="ops-toolbar">
+        <button class="toolbar-btn accent" id="ops-toggle-btn" onclick="togglePanel()">📖 提示词速查</button>
+        <div class="toolbar-spacer"></div>
+        <button class="toolbar-btn" onclick="clearAll()">🗑 清空</button>
+        <button class="toolbar-btn accent" onclick="translateAll()">🌐 翻译</button>
+    </div>
+    <div class="ops-workspaces">
+        <div class="ops-workspace">
+            <div class="ops-ws-header"><span class="ops-ws-title">🇨🇳 中文提示词</span><button class="ops-ws-copy" onclick="copyWs('zh')">复制</button></div>
+            <div class="ops-ws-body">
+                <div class="ops-prompt-area"><textarea id="ws-zh" placeholder="从右侧面板点击标签添加，或直接输入…" oninput="onZhInput()"></textarea></div>
+                <div class="ops-tags-bar" id="tags-zh"></div>
             </div>
         </div>
-
-        <div class="ps-actions">
-            <button class="btn btn-primary" id="btn-ps-translate" onclick="translatePsPrompt()">🌐 翻译中文 → 英文</button>
-            <button class="btn btn-outline" onclick="clearPsBuilder()">🗑 清空全部</button>
+        <div class="ops-workspace">
+            <div class="ops-ws-header"><span class="ops-ws-title">🇺🇸 English Prompt</span><button class="ops-ws-copy" onclick="copyWs('en')">复制</button></div>
+            <div class="ops-ws-body">
+                <div class="ops-prompt-area"><textarea id="ws-en" placeholder="Translation appears here..." readonly></textarea></div>
+                <div class="ops-tags-bar" id="tags-en"></div>
+            </div>
         </div>
     </div>
-
-    <!-- 右侧：提示词速查面板（叠加层，不阻挡操作） -->
-    <div class="ps-panel-overlay" id="ps-panel-overlay"></div>
-    <div class="ps-panel" id="ps-panel">
-        <div class="ps-panel-header">
-            <span class="ps-panel-title">📖 提示词速查手册</span>
-            <button class="ps-panel-close" onclick="closePanel()">&times;</button>
-        </div>
-        <div class="ps-panel-search">
-            <input type="text" id="ps-search" placeholder="🔍 搜索提示词..." oninput="filterPrompts()">
-        </div>
-        <div class="ps-panel-cats" id="ps-panel-cats"></div>
-        <div class="ps-panel-tags" id="ps-panel-tags"></div>
-    </div>
+</div>
+<div class="ops-panel-overlay" id="ops-overlay" onclick="closePanel()"></div>
+<div class="ops-panel" id="ops-panel">
+    <div class="ops-panel-header"><span class="ops-panel-title">📖 提示词速查手册</span><button class="ops-panel-close" onclick="closePanel()">&times;</button></div>
+    <div class="ops-panel-search"><input type="text" id="ops-search" placeholder="🔍 搜索所有提示词…" oninput="filterTags()"></div>
+    <div class="ops-panel-cats" id="ops-panel-cats"></div>
+    <div class="ops-panel-tags" id="ops-panel-tags"></div>
 </div>
 
 <script>
-// ============================================================
-// PROMPT DATA — merged from OpenPromptStudio + existing lib
-// ============================================================
-var PS_CATEGORIES = [
-    {id:"quality", name:"质量 Quality", color:"#22c55e", icon:"🏆", tags:[
-        {zh:"1080p",en:"1080p HD"},{zh:"4K",en:"4K resolution"},{zh:"8K",en:"8K ultra HD"},{zh:"超清",en:"high definition"},{zh:"大师作品",en:"masterpiece"},{zh:"极致画质",en:"best quality"},{zh:"超高分辨率",en:"ultra high res"},{zh:"电影级画质",en:"cinematic quality"}
-    ]},
-    {id:"style", name:"风格 Style", color:"#c8a34e", icon:"🎨", tags:[
-        {zh:"赛璐璐风格",en:"cel shaded style"},{zh:"写实风格",en:"photorealistic"},{zh:"二次元",en:"anime style"},{zh:"油画风",en:"oil painting style"},{zh:"水彩风",en:"watercolor style"},{zh:"水墨风",en:"ink wash painting"},{zh:"线稿",en:"line art"},{zh:"厚涂",en:"impasto style"},{zh:"扁平化",en:"flat illustration"},{zh:"低多边形",en:"low poly style"},{zh:"像素风",en:"pixel art"},{zh:"剪纸风",en:"paper cut style"}
-    ]},
-    {id:"effect", name:"画面效果 Effects", color:"#f97316", icon:"✨", tags:[
-        {zh:"动态模糊",en:"motion blur"},{zh:"景深",en:"depth of field"},{zh:"光晕",en:"lens flare"},{zh:"粒子特效",en:"particle effects"},{zh:"辉光",en:"glow effect"},{zh:"雾气",en:"fog atmosphere"},{zh:"电影颗粒",en:"film grain"},{zh:"柔焦",en:"soft focus"},{zh:"色散",en:"chromatic aberration"},{zh:"虚化背景",en:"bokeh background"},{zh:"扫描线",en:"scanlines"},{zh:"剪影",en:"silhouette"},{zh:"速度线",en:"speed lines"},{zh:"晕影",en:"vignetting"},{zh:"电影光效",en:"cinematic lighting"},{zh:"荧光",en:"glowing light"},{zh:"神圣感顶光",en:"god rays"},{zh:"光线追踪",en:"ray tracing"},{zh:"逆光",en:"backlighting"},{zh:"明暗对比",en:"chiaroscuro"},{zh:"半调风格",en:"halftone"},{zh:"抖动",en:"dithering"},{zh:"焦散",en:"caustics"},{zh:"衍射十字星",en:"diffraction spikes"},{zh:"视错觉",en:"optical illusion"},{zh:"互补色",en:"anaglyph"},{zh:"立体画",en:"stereogram"},{zh:"过曝",en:"overexposure"},{zh:"JPEG压缩失真",en:"jpeg artifacts"},{zh:"模糊的",en:"blurry"},{zh:"闪耀效果",en:"sparkle"}
-    ]},
-    {id:"lighting", name:"光线 Lighting", color:"#fbbf24", icon:"💡", tags:[
-        {zh:"自然光",en:"natural lighting"},{zh:"逆光",en:"backlit"},{zh:"侧光",en:"side lighting"},{zh:"顶光",en:"top lighting"},{zh:"霓虹灯光",en:"neon lighting"},{zh:"黄昏光",en:"golden hour light"},{zh:"柔光",en:"soft diffused light"},{zh:"硬光",en:"hard light"},{zh:"烛光",en:"candlelight"}
-    ]},
-    {id:"color_tone", name:"色调 Color", color:"#a78bfa", icon:"🎨", tags:[
-        {zh:"暖色调",en:"warm color tone"},{zh:"冷色调",en:"cool color tone"},{zh:"黑白",en:"black and white"},{zh:"低饱和",en:"desaturated"},{zh:"赛博朋克",en:"cyberpunk color"},{zh:"胶片色",en:"film color grading"},{zh:"莫兰迪色",en:"Morandi palette"},{zh:"糖果色",en:"pastel candy color"}
-    ]},
-    {id:"camera", name:"视角 Camera", color:"#10b981", icon:"📷", tags:[
-        {zh:"俯视",en:"bird's eye view"},{zh:"仰视",en:"worm's eye view"},{zh:"平视",en:"eye level shot"},{zh:"第一人称",en:"first person POV"},{zh:"鱼眼镜头",en:"fisheye lens"},{zh:"广角",en:"wide angle"},{zh:"特写微距",en:"macro close-up"},{zh:"倾斜镜头",en:"dutch angle"},{zh:"三视图",en:"three-view drawing"},{zh:"多视图",en:"multiple views"},{zh:"背影",en:"from behind"},{zh:"全景",en:"panorama"},{zh:"透视画法",en:"perspective"},{zh:"微距照片",en:"macro photo"},{zh:"超广角",en:"Ultra-Wide Angle"}
-    ]},
-    {id:"composition", name:"构图 Composition", color:"#06b6d4", icon:"📐", tags:[
-        {zh:"全身像",en:"full body shot"},{zh:"半身像",en:"half body shot"},{zh:"肖像特写",en:"portrait close-up"},{zh:"大远景",en:"wide shot"},{zh:"居中构图",en:"center composition"},{zh:"三分法",en:"rule of thirds"},{zh:"对称构图",en:"symmetrical composition"},{zh:"对角线构图",en:"diagonal composition"},{zh:"画框",en:"framed"},{zh:"拼贴画",en:"collage"},{zh:"立绘样式",en:"tachi-e"},{zh:"马赛克艺术",en:"mosaic art"},{zh:"大量留白",en:"negative space"},{zh:"广角镜头",en:"wide shot"}
-    ]},
-    {id:"atmosphere", name:"氛围 Atmosphere", color:"#fb7185", icon:"🌅", tags:[
-        {zh:"电影感",en:"cinematic"},{zh:"史诗恢弘",en:"epic grandeur"},{zh:"梦幻唯美",en:"dreamy ethereal"},{zh:"悬疑紧张",en:"suspenseful tense"},{zh:"浪漫温馨",en:"romantic warm"},{zh:"末日废土",en:"post-apocalyptic"},{zh:"恐怖阴暗",en:"horror dark"},{zh:"科幻未来",en:"sci-fi futuristic"},{zh:"复古怀旧",en:"vintage nostalgic"},{zh:"神秘魔法",en:"mystical magical"},{zh:"都市霓虹",en:"urban neon noir"},{zh:"清新自然",en:"fresh natural"}
-    ]},
-    {id:"hair", name:"容貌-头发 Hair", color:"#8b5cf6", icon:"💇", tags:[
-        {zh:"金发",en:"blonde hair"},{zh:"银发",en:"silver hair"},{zh:"白发",en:"white hair"},{zh:"黑发",en:"black hair"},{zh:"紫发",en:"purple hair"},{zh:"红发",en:"red hair"},{zh:"蓝发",en:"blue hair"},{zh:"绿发",en:"green hair"},{zh:"粉发",en:"pink hair"},{zh:"棕发",en:"brown hair"},{zh:"渐变发色",en:"gradient hair"},{zh:"彩虹发",en:"rainbow hair"},{zh:"呆毛",en:"ahoge"},{zh:"刘海",en:"bangs"},{zh:"齐刘海",en:"blunt bangs"},{zh:"长发",en:"long hair"},{zh:"短发",en:"short hair"},{zh:"马尾",en:"ponytail"},{zh:"双马尾",en:"twintails"},{zh:"卷发",en:"curly hair"},{zh:"直发",en:"straight hair"},{zh:"辫子",en:"braid"},{zh:"双辫子",en:"twin braids"},{zh:"姬发式",en:"hime cut"},{zh:"凌乱发型",en:"messy hair"},{zh:"湿头发",en:"wet hair"},{zh:"波波头",en:"bob cut"},{zh:"钻头卷",en:"drill hair"},{zh:"团子头",en:"hair bun"},{zh:"披肩发",en:"hair over shoulder"},{zh:"精灵头",en:"pixie cut"},{zh:"寸头",en:"buzz cut"},{zh:"脏辫",en:"dreadlocks"},{zh:"丸子头",en:"topknot"},{zh:"爆炸头",en:"afro"},{zh:"鲻鱼头",en:"mullet"},{zh:"锅盖头",en:"bowl cut"},{zh:"很长的头发",en:"very long hair"},{zh:"中等长发",en:"medium hair"},{zh:"侧马尾",en:"side ponytail"},{zh:"高马尾",en:"high ponytail"},{zh:"低扎双尾",en:"low twintails"},{zh:"自然卷",en:"wavy hair"},{zh:"不对称刘海",en:"asymmetrical bangs"},{zh:"斜刘海",en:"diagonal bangs"}
-    ]},
-    {id:"headwear", name:"容貌-头饰 Headwear", color:"#f59e0b", icon:"👑", tags:[
-        {zh:"皇冠",en:"crown"},{zh:"贝雷帽",en:"beret"},{zh:"兜帽",en:"hood"},{zh:"护士帽",en:"nurse cap"},{zh:"女巫帽",en:"witch hat"},{zh:"法师帽",en:"wizard hat"},{zh:"水手帽",en:"sailor hat"},{zh:"圣诞帽",en:"santa hat"},{zh:"发卡",en:"hairpin"},{zh:"发箍",en:"hairband"},{zh:"发带",en:"hair ribbon"},{zh:"蝴蝶结发饰",en:"hair bow"},{zh:"女仆头饰",en:"maid headdress"},{zh:"太阳镜",en:"sunglasses"},{zh:"眼罩",en:"blindfold"},{zh:"单眼罩",en:"eyepatch"},{zh:"面具",en:"mask"},{zh:"护目镜",en:"goggles"},{zh:"耳机",en:"headphones"},{zh:"首饰",en:"jewelry"},{zh:"铃铛",en:"bell"},{zh:"面纹",en:"facepaint"},{zh:"兽角",en:"horns"},{zh:"鹿角",en:"antlers"},{zh:"龙角",en:"dragon horns"},{zh:"恶魔的角",en:"demon horns"},{zh:"簪子",en:"kanzashi"},{zh:"头箍",en:"hairband"},{zh:"发夹",en:"hairclip"},{zh:"发花",en:"hair flower"},{zh:"医用口罩",en:"surgical mask"},{zh:"面纱",en:"mouth veil"},{zh:"无框眼镜",en:"rimless eyewear"},{zh:"头上有花",en:"flower on head"},{zh:"花冠",en:"head wreath"},{zh:"丝带",en:"ribbon"}
-    ]},
-    {id:"eyes", name:"容貌-眼睛 Eyes", color:"#e8537a", icon:"👁", tags:[
-        {zh:"异色瞳",en:"heterochromia"},{zh:"猫眼",en:"slit pupils"},{zh:"爱心瞳",en:"heart-shaped pupils"},{zh:"星形眼睛",en:"star-shaped pupils"},{zh:"吊眼角",en:"tsurime"},{zh:"垂眼角",en:"tareme"},{zh:"三白眼",en:"sanpaku"},{zh:"闭眼",en:"closed eyes"},{zh:"睁大眼睛",en:"wide eyes"},{zh:"半闭眼睛",en:"half-closed eyes"},{zh:"眼泪",en:"tears"},{zh:"发光眼睛",en:"glowing eyes"},{zh:"星星眼",en:"sparkling eyes"},{zh:"斗鸡眼",en:"cross-eyed"},{zh:"翻白眼",en:"rolling eyes"},{zh:"红眼",en:"red eyes"},{zh:"紫眼",en:"purple eyes"},{zh:"金眼",en:"yellow eyes"},{zh:"白眼",en:"white eyes"},{zh:"琥珀色眼",en:"amber eyes"},{zh:"花形瞳孔",en:"flower-shaped pupils"},{zh:"蛇瞳",en:"snake pupils"},{zh:"魔瞳",en:"devil pupils"},{zh:"长睫毛",en:"long eyelashes"},{zh:"美瞳",en:"color contact lenses"},{zh:"渐变瞳色",en:"gradient eyes"}
-    ]},
-    {id:"ears", name:"容貌-耳朵 Ears", color:"#ef4444", icon:"👂", tags:[
-        {zh:"猫耳",en:"cat ears"},{zh:"狐耳",en:"fox ears"},{zh:"狗耳",en:"dog ears"},{zh:"兔耳",en:"rabbit ears"},{zh:"熊耳",en:"bear ears"},{zh:"鹿耳",en:"deer ears"},{zh:"狼耳",en:"wolf ears"},{zh:"虎耳",en:"tiger ears"},{zh:"鼠耳",en:"mouse ears"},{zh:"蝙蝠耳",en:"bat ears"},{zh:"尖耳",en:"pointy ears"},{zh:"耳环",en:"earrings"},{zh:"动物耳朵",en:"animal ears"},{zh:"兽耳萝莉模式",en:"kemonomimi mode"}
-    ]},
-    {id:"expression", name:"容貌-表情 Expression", color:"#ec4899", icon:"😊", tags:[
-        {zh:"微笑",en:"smile"},{zh:"坏笑",en:"evil smile"},{zh:"浅笑",en:"light smile"},{zh:"露齿而笑",en:"grin"},{zh:"傻笑",en:"smirk"},{zh:"诱人的微笑",en:"seductive smile"},{zh:"大笑",en:"laughing"},{zh:"生气的",en:"angry"},{zh:"苦恼的",en:"annoyed"},{zh:"悲伤的",en:"sad"},{zh:"哭",en:"crying"},{zh:"啜泣",en:"sobbing"},{zh:"开心的眼泪",en:"happy tears"},{zh:"脸红的",en:"blush"},{zh:"害羞的",en:"shy"},{zh:"尴尬的",en:"embarrassed"},{zh:"困乏的",en:"sleepy"},{zh:"喝醉的",en:"drunk"},{zh:"害怕的",en:"scared"},{zh:"惊讶",en:"surprised"},{zh:"恐慌的",en:"panicking"},{zh:"担忧的",en:"worried"},{zh:"无聊的",en:"bored"},{zh:"兴奋",en:"excited"},{zh:"快乐",en:"happy"},{zh:"得意脸",en:"doyagao"},{zh:"傲娇",en:"tsundere"},{zh:"病娇",en:"yandere"},{zh:"疯狂",en:"crazy"},{zh:"严肃的",en:"serious"},{zh:"绝望",en:"despair"},{zh:"蔑视",en:"disdain"},{zh:"恶心",en:"disgust"},{zh:"轻蔑/怒视",en:"glaring"},{zh:"嫉妒",en:"jealous"},{zh:"无口",en:"expressionless"},{zh:"傲慢",en:"v-shaped eyebrows"},{zh:"厌恶的怪相",en:"grimace"},{zh:"尖叫",en:"screaming"},{zh:"疼痛",en:"pain"},{zh:"叹气",en:"sigh"},{zh:"流口水",en:"drooling"},{zh:"尖牙",en:"fangs"},{zh:"吐舌头",en:"tongue out"},{zh:"舔嘴唇",en:"licking lips"},{zh:"咬牙",en:"clenched teeth"},{zh:"张口",en:"open mouth"},{zh:"努嘴",en:"pout"},{zh:"阿嘿颜",en:"ahegao"},{zh:"失神",en:"unconscious"},{zh:"诱惑的表情",en:"torogao"},{zh:"有决心的",en:"determined"},{zh:"疑惑",en:"confused"},{zh:"失望的",en:"disappointed"},{zh:"沮丧",en:"frustrated"},{zh:"思考",en:"thinking"},{zh:"沉思的",en:"pensive"},{zh:"闷闷不乐",en:"sulking"}
-    ]},
-    {id:"ar", name:"分辨率 Aspect Ratio", color:"#94a3b8", icon:"📱", tags:[
-        {zh:"16:9",en:"16:9 widescreen"},{zh:"9:16",en:"9:16 vertical"},{zh:"1:1",en:"1:1 square"},{zh:"2:3",en:"2:3 portrait"},{zh:"21:9",en:"21:9 ultrawide"},{zh:"4:3",en:"4:3 classic"}
-    ]},
-    {id:"movement", name:"运镜 Movement", color:"#14b8a6", icon:"🎥", tags:[
-        {zh:"缓慢推镜",en:"slow push in"},{zh:"缓慢拉远",en:"slow pull out"},{zh:"横向摇镜",en:"panning shot"},{zh:"垂直摇镜",en:"tilt shot"},{zh:"跟拍",en:"tracking shot"},{zh:"环绕拍摄",en:"orbit shot"},{zh:"斯坦尼康",en:"Steadicam smooth"},{zh:"手持晃动",en:"handheld shaky"},{zh:"快速甩镜",en:"whip pan"},{zh:"升格慢镜",en:"slow motion"},{zh:"航拍俯瞰",en:"drone aerial shot"},{zh:"滑动变焦",en:"dolly zoom"}
-    ]}
+var CATS = [
+{id:"quality",name:"质量",icon:"🏆",color:"#22c55e",tags:[{zh:"4K",en:"4K"},{zh:"8K",en:"8K"},{zh:"超清",en:"high definition"},{zh:"超细节",en:"ultra detailed"},{zh:"大师作品",en:"masterpiece"},{zh:"极致画质",en:"best quality"},{zh:"超高分辨率",en:"ultra high res"},{zh:"超高清",en:"UHD"},{zh:"获奖作品",en:"award winning"},{zh:"官方艺术",en:"official art"},{zh:"精细",en:"intricate detail"},{zh:"锐利",en:"sharp focus"},{zh:"高对比度",en:"high contrast"},{zh:"HDR",en:"HDR"},{zh:"无损画质",en:"lossless quality"}]},
+{id:"style",name:"风格",icon:"🎨",color:"#c8a34e",tags:[{zh:"赛璐璐",en:"cel shaded"},{zh:"写实",en:"photorealistic"},{zh:"超写实",en:"hyperrealistic"},{zh:"二次元",en:"anime style"},{zh:"油画",en:"oil painting"},{zh:"水彩",en:"watercolor"},{zh:"水墨",en:"ink wash painting"},{zh:"线稿",en:"line art"},{zh:"厚涂",en:"impasto"},{zh:"扁平",en:"flat illustration"},{zh:"低多边形",en:"low poly"},{zh:"像素风",en:"pixel art"},{zh:"剪纸风",en:"paper cut"},{zh:"素描",en:"sketch"},{zh:"3D渲染",en:"3D render"},{zh:"黏土风",en:"claymation"},{zh:"折纸风",en:"origami"},{zh:"矢量图",en:"vector art"},{zh:"涂鸦",en:"graffiti"},{zh:"浮世绘",en:"ukiyo-e"},{zh:"波普艺术",en:"pop art"},{zh:"极简主义",en:"minimalist"},{zh:"蒸汽波",en:"vaporwave"},{zh:"哥特",en:"gothic"},{zh:"巴洛克",en:"baroque"},{zh:"洛可可",en:"rococo"},{zh:"装饰艺术",en:"art deco"},{zh:"新艺术",en:"art nouveau"},{zh:"表现主义",en:"expressionism"},{zh:"印象派",en:"impressionism"},{zh:"超现实主义",en:"surrealism"},{zh:"立体主义",en:"cubism"},{zh:"抽象",en:"abstract"},{zh:"概念艺术",en:"concept art"},{zh:"哑光画",en:"matte painting"},{zh:"壁画画风",en:"fresco"},{zh:"马赛克",en:"mosaic"},{zh:"彩色玻璃",en:"stained glass"},{zh:"图腾",en:"totem style"}]},
+{id:"effect",name:"效果",icon:"✨",color:"#f97316",tags:[{zh:"动态模糊",en:"motion blur"},{zh:"景深",en:"depth of field"},{zh:"光晕",en:"lens flare"},{zh:"粒子特效",en:"particle effects"},{zh:"辉光",en:"glow"},{zh:"雾气",en:"fog"},{zh:"电影颗粒",en:"film grain"},{zh:"柔焦",en:"soft focus"},{zh:"色散",en:"chromatic aberration"},{zh:"散景",en:"bokeh"},{zh:"扫描线",en:"scanlines"},{zh:"剪影",en:"silhouette"},{zh:"速度线",en:"speed lines"},{zh:"晕影",en:"vignetting"},{zh:"电影光效",en:"cinematic lighting"},{zh:"荧光",en:"glowing light"},{zh:"神圣顶光",en:"god rays"},{zh:"逆光",en:"backlighting"},{zh:"明暗对比",en:"chiaroscuro"},{zh:"半调",en:"halftone"},{zh:"抖动",en:"dithering"},{zh:"焦散",en:"caustics"},{zh:"过曝",en:"overexposure"},{zh:"模糊",en:"blurry"},{zh:"衍射十字星",en:"diffraction spikes"},{zh:"互补色3D",en:"anaglyph"},{zh:"视错觉",en:"optical illusion"},{zh:"JPEG失真",en:"jpeg artifacts"},{zh:"闪耀",en:"sparkle"},{zh:"光线追踪",en:"ray tracing"},{zh:"色调映射",en:"tone mapping"},{zh:"泛光",en:"bloom"},{zh:"环境光遮蔽",en:"ambient occlusion"},{zh:"次表面散射",en:"subsurface scattering"},{zh:"体积雾",en:"volumetric fog"},{zh:"丁达尔效应",en:"Tyndall effect"}]},
+{id:"lighting",name:"光线",icon:"💡",color:"#fbbf24",tags:[{zh:"自然光",en:"natural lighting"},{zh:"逆光",en:"backlit"},{zh:"侧光",en:"side lighting"},{zh:"顶光",en:"top lighting"},{zh:"底光",en:"bottom lighting"},{zh:"霓虹灯",en:"neon lighting"},{zh:"黄昏光",en:"golden hour"},{zh:"柔光",en:"soft diffused light"},{zh:"硬光",en:"hard light"},{zh:"烛光",en:"candlelight"},{zh:"月光",en:"moonlight"},{zh:"摄影棚光",en:"studio lighting"},{zh:"体积光",en:"volumetric lighting"},{zh:"三点照明",en:"three-point lighting"},{zh:"环形光",en:"ring light"},{zh:"蝴蝶光",en:"butterfly lighting"},{zh:"伦勃朗光",en:"Rembrandt lighting"},{zh:"分割光",en:"split lighting"},{zh:"轮廓光",en:"rim light"},{zh:"补光",en:"fill light"},{zh:"主光",en:"key light"},{zh:"环境光",en:"ambient light"},{zh:"日出光",en:"sunrise light"},{zh:"日落光",en:"sunset light"},{zh:"魔法光效",en:"magical glow"}]},
+{id:"color_tone",name:"色调",icon:"🎨",color:"#a78bfa",tags:[{zh:"暖色调",en:"warm color tone"},{zh:"冷色调",en:"cool color tone"},{zh:"黑白",en:"black and white"},{zh:"低饱和",en:"desaturated"},{zh:"高饱和",en:"vibrant saturated"},{zh:"赛博朋克",en:"cyberpunk"},{zh:"胶片色",en:"film color grading"},{zh:"莫兰迪色",en:"Morandi palette"},{zh:"糖果色",en:"pastel candy"},{zh:"暗黑",en:"dark moody"},{zh:"单色",en:"monochrome"},{zh:"双色调",en:"duotone"},{zh:"复古棕",en:"sepia"},{zh:"青橙调",en:"teal and orange"},{zh:"蓝调",en:"blue tone"},{zh:"金属色",en:"metallic"},{zh:"彩虹色",en:"rainbow"},{zh:"金色",en:"golden"},{zh:"霓虹色",en:"neon colors"}]},
+{id:"camera",name:"视角",icon:"📷",color:"#10b981",tags:[{zh:"俯视",en:"bird's eye view"},{zh:"仰视",en:"worm's eye view"},{zh:"平视",en:"eye level"},{zh:"第一人称",en:"first person POV"},{zh:"鱼眼镜头",en:"fisheye lens"},{zh:"广角",en:"wide angle"},{zh:"微距",en:"macro close-up"},{zh:"倾斜镜头",en:"dutch angle"},{zh:"三视图",en:"three-view"},{zh:"多视图",en:"multiple views"},{zh:"背影",en:"from behind"},{zh:"全景",en:"panorama"},{zh:"透视画法",en:"perspective"},{zh:"微距照",en:"macro photo"},{zh:"超广角",en:"ultra-wide angle"},{zh:"等轴视图",en:"isometric view"},{zh:"顶视角",en:"top-down view"},{zh:"正面",en:"front view"},{zh:"侧面",en:"side view"},{zh:"四分之三",en:"three-quarter view"},{zh:"过肩镜头",en:"over the shoulder"},{zh:"无人机视角",en:"drone view"}]},
+{id:"composition",name:"构图",icon:"📐",color:"#06b6d4",tags:[{zh:"全身像",en:"full body"},{zh:"半身像",en:"half body"},{zh:"肖像特写",en:"portrait"},{zh:"大远景",en:"wide shot"},{zh:"居中",en:"center composition"},{zh:"三分法",en:"rule of thirds"},{zh:"对称",en:"symmetrical"},{zh:"对角线",en:"diagonal"},{zh:"画框",en:"framed"},{zh:"拼贴画",en:"collage"},{zh:"留白",en:"negative space"},{zh:"广角镜头",en:"wide shot lens"},{zh:"特写",en:"close-up"},{zh:"中景",en:"medium shot"},{zh:"远景",en:"long shot"},{zh:"黄金比例",en:"golden ratio"},{zh:"引导线",en:"leading lines"},{zh:"前景框架",en:"foreground framing"},{zh:"大头照",en:"headshot"},{zh:"五人组",en:"group of five"}]},
+{id:"atmosphere",name:"氛围",icon:"🌅",color:"#fb7185",tags:[{zh:"电影感",en:"cinematic"},{zh:"史诗",en:"epic"},{zh:"梦幻",en:"dreamy ethereal"},{zh:"悬疑",en:"suspenseful"},{zh:"浪漫",en:"romantic"},{zh:"末日",en:"post-apocalyptic"},{zh:"恐怖",en:"horror"},{zh:"科幻",en:"sci-fi"},{zh:"复古",en:"vintage nostalgic"},{zh:"神秘",en:"mystical"},{zh:"都市霓虹",en:"urban neon noir"},{zh:"清新",en:"fresh natural"},{zh:"诡异",en:"eerie"},{zh:"宁静",en:"serene peaceful"},{zh:"黑暗奇幻",en:"dark fantasy"},{zh:"蒸汽朋克",en:"steampunk"},{zh:"柴油朋克",en:"dieselpunk"},{zh:"太阳朋克",en:"solarpunk"},{zh:"极简禅意",en:"zen minimal"},{zh:"温暖治愈",en:"cozy warm"},{zh:"冰冷荒芜",en:"cold desolate"}]},
+{id:"character",name:"人物",icon:"👤",color:"#8b5cf6",tags:[{zh:"女性",en:"female"},{zh:"男性",en:"male"},{zh:"少女",en:"young woman"},{zh:"少年",en:"young man"},{zh:"小孩",en:"child"},{zh:"老人",en:"elderly"},{zh:"机器人",en:"robot"},{zh:"赛博格",en:"cyborg"},{zh:"精灵",en:"elf"},{zh:"天使",en:"angel"},{zh:"恶魔",en:"demon"},{zh:"吸血鬼",en:"vampire"},{zh:"狼人",en:"werewolf"},{zh:"兽人",en:"kemonomimi"},{zh:"猫娘",en:"cat girl"},{zh:"女仆",en:"maid"},{zh:"武士",en:"samurai"},{zh:"忍者",en:"ninja"},{zh:"骑士",en:"knight"},{zh:"魔法师",en:"wizard"},{zh:"女巫",en:"witch"},{zh:"公主",en:"princess"},{zh:"女王",en:"queen"},{zh:"国王",en:"king"},{zh:"战士",en:"warrior"},{zh:"刺客",en:"assassin"},{zh:"猎人",en:"hunter"}]},
+{id:"clothing",name:"服饰",icon:"👗",color:"#ec4899",tags:[{zh:"连衣裙",en:"dress"},{zh:"西装",en:"suit"},{zh:"和服",en:"kimono"},{zh:"浴衣",en:"yukata"},{zh:"汉服",en:"hanfu"},{zh:"旗袍",en:"cheongsam"},{zh:"校服",en:"school uniform"},{zh:"水手服",en:"sailor uniform"},{zh:"军装",en:"military uniform"},{zh:"铠甲",en:"armor"},{zh:"斗篷",en:"cloak"},{zh:"hoodie",en:"hoodie"},{zh:"T恤",en:"t-shirt"},{zh:"牛仔裤",en:"jeans"},{zh:"裙子",en:"skirt"},{zh:"毛衣",en:"sweater"},{zh:"皮衣",en:"leather jacket"},{zh:"比基尼",en:"bikini"},{zh:"泳装",en:"swimsuit"},{zh:"婚纱",en:"wedding dress"},{zh:"哥特萝莉",en:"gothic lolita"},{zh:"朋克风",en:"punk style"},{zh:"街头风",en:"streetwear"},{zh:"高定礼服",en:"haute couture"},{zh:"运动服",en:"sportswear"}]},
+{id:"hair",name:"头发",icon:"💇",color:"#f59e0b",tags:[{zh:"金发",en:"blonde hair"},{zh:"银发",en:"silver hair"},{zh:"白发",en:"white hair"},{zh:"黑发",en:"black hair"},{zh:"紫发",en:"purple hair"},{zh:"红发",en:"red hair"},{zh:"蓝发",en:"blue hair"},{zh:"绿发",en:"green hair"},{zh:"粉发",en:"pink hair"},{zh:"棕发",en:"brown hair"},{zh:"渐变发色",en:"gradient hair"},{zh:"彩虹发",en:"rainbow hair"},{zh:"呆毛",en:"ahoge"},{zh:"长发",en:"long hair"},{zh:"短发",en:"short hair"},{zh:"马尾",en:"ponytail"},{zh:"双马尾",en:"twintails"},{zh:"卷发",en:"curly hair"},{zh:"直发",en:"straight hair"},{zh:"辫子",en:"braid"},{zh:"姬发式",en:"hime cut"},{zh:"凌乱发型",en:"messy hair"},{zh:"波波头",en:"bob cut"},{zh:"丸子头",en:"hair bun"},{zh:"披肩发",en:"hair over shoulder"},{zh:"刘海",en:"bangs"},{zh:"齐刘海",en:"blunt bangs"},{zh:"侧马尾",en:"side ponytail"},{zh:"高马尾",en:"high ponytail"},{zh:"爆炸头",en:"afro"},{zh:"寸头",en:"buzz cut"},{zh:"鲻鱼头",en:"mullet"},{zh:"脏辫",en:"dreadlocks"},{zh:"湿发",en:"wet hair"}]},
+{id:"headwear",name:"头饰",icon:"👑",color:"#ef4444",tags:[{zh:"皇冠",en:"crown"},{zh:"贝雷帽",en:"beret"},{zh:"兜帽",en:"hood"},{zh:"护士帽",en:"nurse cap"},{zh:"女巫帽",en:"witch hat"},{zh:"法师帽",en:"wizard hat"},{zh:"圣诞帽",en:"santa hat"},{zh:"太阳镜",en:"sunglasses"},{zh:"眼罩",en:"eyepatch"},{zh:"面具",en:"mask"},{zh:"护目镜",en:"goggles"},{zh:"耳机",en:"headphones"},{zh:"发卡",en:"hairpin"},{zh:"发箍",en:"hairband"},{zh:"发带",en:"hair ribbon"},{zh:"蝴蝶结",en:"hair bow"},{zh:"簪子",en:"kanzashi"},{zh:"花冠",en:"flower crown"},{zh:"棒球帽",en:"baseball cap"},{zh:"头盔",en:"helmet"},{zh:"丝带",en:"ribbon"},{zh:"面纱",en:"veil"},{zh:"医用口罩",en:"surgical mask"}]},
+{id:"eyes",name:"眼睛",icon:"👁",color:"#e8537a",tags:[{zh:"异色瞳",en:"heterochromia"},{zh:"猫眼",en:"slit pupils"},{zh:"爱心瞳",en:"heart-shaped pupils"},{zh:"星形眼睛",en:"star-shaped pupils"},{zh:"吊眼角",en:"tsurime"},{zh:"垂眼角",en:"tareme"},{zh:"三白眼",en:"sanpaku"},{zh:"闭眼",en:"closed eyes"},{zh:"睁大眼睛",en:"wide eyes"},{zh:"半闭眼睛",en:"half-closed eyes"},{zh:"眼泪",en:"tears"},{zh:"发光眼睛",en:"glowing eyes"},{zh:"星星眼",en:"sparkling eyes"},{zh:"斗鸡眼",en:"cross-eyed"},{zh:"红眼",en:"red eyes"},{zh:"紫眼",en:"purple eyes"},{zh:"金眼",en:"golden eyes"},{zh:"蓝眼",en:"blue eyes"},{zh:"绿眼",en:"green eyes"},{zh:"琥珀眼",en:"amber eyes"},{zh:"蛇瞳",en:"snake pupils"},{zh:"长睫毛",en:"long eyelashes"},{zh:"渐变瞳色",en:"gradient eyes"}]},
+{id:"ears",name:"耳朵",icon:"👂",color:"#14b8a6",tags:[{zh:"猫耳",en:"cat ears"},{zh:"狐耳",en:"fox ears"},{zh:"狗耳",en:"dog ears"},{zh:"兔耳",en:"rabbit ears"},{zh:"熊耳",en:"bear ears"},{zh:"鹿耳",en:"deer ears"},{zh:"狼耳",en:"wolf ears"},{zh:"虎耳",en:"tiger ears"},{zh:"鼠耳",en:"mouse ears"},{zh:"蝙蝠耳",en:"bat ears"},{zh:"尖耳",en:"pointy ears"},{zh:"精灵耳",en:"elf ears"},{zh:"耳环",en:"earrings"},{zh:"兽耳",en:"animal ears"}]},
+{id:"expression",name:"表情",icon:"😊",color:"#d946ef",tags:[{zh:"微笑",en:"smile"},{zh:"坏笑",en:"evil smile"},{zh:"露齿笑",en:"grin"},{zh:"大笑",en:"laughing"},{zh:"生气的",en:"angry"},{zh:"悲伤的",en:"sad"},{zh:"哭",en:"crying"},{zh:"啜泣",en:"sobbing"},{zh:"脸红的",en:"blush"},{zh:"害羞的",en:"shy"},{zh:"困乏的",en:"sleepy"},{zh:"害怕的",en:"scared"},{zh:"惊讶",en:"surprised"},{zh:"恐慌",en:"panicking"},{zh:"无聊的",en:"bored"},{zh:"兴奋",en:"excited"},{zh:"傲娇",en:"tsundere"},{zh:"病娇",en:"yandere"},{zh:"疯狂",en:"crazy"},{zh:"严肃的",en:"serious"},{zh:"绝望",en:"despair"},{zh:"蔑视",en:"disdain"},{zh:"恶心",en:"disgust"},{zh:"怒视",en:"glaring"},{zh:"无表情",en:"expressionless"},{zh:"傲慢",en:"arrogant"},{zh:"流口水",en:"drooling"},{zh:"尖牙",en:"fangs"},{zh:"吐舌头",en:"tongue out"},{zh:"舔嘴唇",en:"licking lips"},{zh:"咬牙",en:"clenched teeth"},{zh:"阿嘿颜",en:"ahegao"},{zh:"有决心的",en:"determined"},{zh:"疑惑",en:"confused"},{zh:"失望的",en:"disappointed"},{zh:"思考中",en:"thinking"}]},
+{id:"pose",name:"姿态",icon:"🧘",color:"#84cc16",tags:[{zh:"站姿",en:"standing"},{zh:"坐姿",en:"sitting"},{zh:"跪姿",en:"kneeling"},{zh:"躺着",en:"lying down"},{zh:"跳跃",en:"jumping"},{zh:"奔跑",en:"running"},{zh:"走路",en:"walking"},{zh:"飞行",en:"flying"},{zh:"漂浮",en:"floating"},{zh:"战斗姿态",en:"fighting stance"},{zh:"持剑",en:"holding sword"},{zh:"持枪",en:"holding gun"},{zh:"双手合十",en:"hands together"},{zh:"回头看",en:"looking back"},{zh:"回头",en:"turning around"},{zh:"托腮",en:"hand on chin"},{zh:"叉腰",en:"hands on hips"},{zh:"抱臂",en:"crossed arms"},{zh:"挥手",en:"waving"},{zh:"比耶",en:"peace sign"},{zh:"V字手势",en:"V sign"},{zh:"敬礼",en:"saluting"},{zh:"鼓掌",en:"clapping"},{zh:"伸展双臂",en:"spread arms"},{zh:"胜利姿势",en:"victory pose"}]},
+{id:"background",name:"背景",icon:"🏞",color:"#0ea5e9",tags:[{zh:"纯色背景",en:"solid color background"},{zh:"白色背景",en:"white background"},{zh:"黑色背景",en:"black background"},{zh:"渐变背景",en:"gradient background"},{zh:"天空",en:"sky"},{zh:"星空",en:"starry sky"},{zh:"宇宙",en:"space"},{zh:"海洋",en:"ocean"},{zh:"森林",en:"forest"},{zh:"城市",en:"city"},{zh:"废墟",en:"ruins"},{zh:"沙漠",en:"desert"},{zh:"雪景",en:"snowscape"},{zh:"山脉",en:"mountains"},{zh:"樱花",en:"cherry blossoms"},{zh:"草原",en:"grassland"},{zh:"火山",en:"volcano"},{zh:"城堡",en:"castle"},{zh:"教室",en:"classroom"},{zh:"办公室",en:"office"},{zh:"咖啡厅",en:"cafe"},{zh:"赛博城市",en:"cyberpunk city"},{zh:"蒸汽朋克城",en:"steampunk city"},{zh:"水下",en:"underwater"},{zh:"云端",en:"clouds"}]},
+{id:"artist",name:"艺术家",icon:"🖌",color:"#f43f5e",tags:[{zh:"宫崎骏",en:"Hayao Miyazaki"},{zh:"新海诚",en:"Makoto Shinkai"},{zh:"村田莲尔",en:"Range Murata"},{zh:"天野喜孝",en:"Yoshitaka Amano"},{zh:"莫奈",en:"Claude Monet"},{zh:"梵高",en:"Van Gogh"},{zh:"毕加索",en:"Picasso"},{zh:"达利",en:"Salvador Dali"},{zh:"穆夏",en:"Alphonse Mucha"},{zh:"鸟山明",en:"Akira Toriyama"},{zh:"岸本齐史",en:"Masashi Kishimoto"},{zh:"伊藤润二",en:"Junji Ito"},{zh:"吉格尔",en:"H.R. Giger"},{zh:"克林姆",en:"Gustav Klimt"},{zh:"埃舍尔",en:"M.C. Escher"},{zh:"诺曼·洛克威尔",en:"Norman Rockwell"},{zh:"弗兰克·米勒",en:"Frank Miller"},{zh:"西蒙·斯塔伦海格",en:"Simon Stalenhag"},{zh:"寺田克也",en:"Katsuya Terada"}]},
+{id:"ar",name:"画幅",icon:"📱",color:"#94a3b8",tags:[{zh:"16:9",en:"16:9"},{zh:"9:16",en:"9:16"},{zh:"1:1",en:"1:1"},{zh:"2:3",en:"2:3"},{zh:"3:2",en:"3:2"},{zh:"4:3",en:"4:3"},{zh:"21:9",en:"21:9"}]},
+{id:"movement",name:"运镜",icon:"🎥",color:"#6366f1",tags:[{zh:"缓慢推镜",en:"slow push in"},{zh:"缓慢拉远",en:"slow pull out"},{zh:"横向摇镜",en:"panning shot"},{zh:"垂直摇镜",en:"tilt shot"},{zh:"跟拍",en:"tracking shot"},{zh:"环绕拍摄",en:"orbit shot"},{zh:"斯坦尼康",en:"Steadicam"},{zh:"手持晃动",en:"handheld shaky"},{zh:"快速甩镜",en:"whip pan"},{zh:"升格慢镜",en:"slow motion"},{zh:"降格快镜",en:"fast motion"},{zh:"航拍",en:"drone aerial"},{zh:"滑动变焦",en:"dolly zoom"},{zh:"希区柯克变焦",en:"Hitchcock zoom"},{zh:"旋转镜头",en:"spin shot"},{zh:"固定镜头",en:"static shot"}]}
 ];
 
-// ============================================================
-// BUILD CATEGORY TABS & TAG PANELS
-// ============================================================
-var activeCat = PS_CATEGORIES[0].id;
-var addedTags = {};
+var tagCount = 0;
+CATS.forEach(function(c){ tagCount += c.tags.length; });
 
-// Cached DOM refs — set once in DOMContentLoaded
+var addedTags = {};
+var activeCat = CATS[0].id;
 var elZh, elEn, elTagsZh, elTagsEn, elPanel, elOverlay, elPanelCats, elPanelTags;
 
-function getTagParts() {
-    var zhParts = [], enParts = [];
-    Object.keys(addedTags).forEach(function(zh) {
-        zhParts.push(zh);
-        enParts.push(addedTags[zh].en);
-    });
-    return { zhParts: zhParts, enParts: enParts };
-}
-
-function getCustomPrefix() {
-    var val = elZh.value;
-    var tagStr = getTagParts().zhParts.join(", ");
-    if (!tagStr) return val;
-    if (val.endsWith(", " + tagStr)) return val.slice(0, -(2 + tagStr.length));
-    return val;
-}
-
-function createChip(text, color, key) {
-    var chip = document.createElement("span");
-    chip.className = "ps-added-tag";
-    chip.textContent = text;
-    chip.style.background = color + "22";
-    chip.style.borderColor = color;
-    chip.style.color = color;
-    chip.title = "点击移除";
-    chip.onclick = function() { removeTag(key); };
-    return chip;
-}
+document.addEventListener("DOMContentLoaded", function() {
+    elZh = document.getElementById("ws-zh");
+    elEn = document.getElementById("ws-en");
+    elTagsZh = document.getElementById("tags-zh");
+    elTagsEn = document.getElementById("tags-en");
+    elPanel = document.getElementById("ops-panel");
+    elOverlay = document.getElementById("ops-overlay");
+    elPanelCats = document.getElementById("ops-panel-cats");
+    elPanelTags = document.getElementById("ops-panel-tags");
+    buildPanel();
+    document.getElementById("ops-toggle-btn").textContent = "📖 提示词速查（" + tagCount + " 词）";
+});
 
 function buildPanel() {
     elPanelCats.innerHTML = "";
     elPanelTags.innerHTML = "";
-
-    PS_CATEGORIES.forEach(function(cat, ci) {
+    CATS.forEach(function(cat, ci) {
         var btn = document.createElement("button");
-        btn.className = "ps-cat-btn" + (ci === 0 ? " active" : "");
+        btn.className = "ops-cat-btn" + (ci === 0 ? " active" : "");
         btn.textContent = cat.icon + " " + cat.name;
-        btn.dataset.catId = cat.id;
-        btn.style.setProperty("--cat-color", cat.color);
+        btn.dataset.cat = cat.id;
         btn.onclick = function() { switchCat(cat.id); };
         elPanelCats.appendChild(btn);
 
         var panel = document.createElement("div");
-        panel.className = "ps-cat-panel" + (ci === 0 ? " active" : "");
-        panel.id = "ps-cat-panel-" + cat.id;
+        panel.className = "ops-cat-panel" + (ci === 0 ? " active" : "");
+        panel.id = "ops-cat-" + cat.id;
         cat.tags.forEach(function(t) {
             var tag = document.createElement("span");
-            tag.className = "ps-tag";
+            tag.className = "ops-tag";
             tag.textContent = t.zh;
             tag.title = t.en;
-            tag.style.setProperty("--tag-color", cat.color);
+            tag.dataset.zh = t.zh;
+            tag.dataset.en = t.en;
+            tag.dataset.searchText = (t.zh + " " + t.en).toLowerCase();
             tag.onclick = function() { addTag(t.zh, t.en, cat.color); };
             panel.appendChild(tag);
         });
@@ -173,186 +151,103 @@ function buildPanel() {
     });
 }
 
-function switchCat(catId) {
-    activeCat = catId;
-    document.querySelectorAll(".ps-cat-btn").forEach(function(b) { b.classList.remove("active"); });
-    document.querySelectorAll(".ps-cat-panel").forEach(function(p) { p.classList.remove("active"); });
-    document.getElementById("ps-cat-panel-" + catId).classList.add("active");
-    var activeBtn = document.querySelector(".ps-cat-btn[data-cat-id='" + catId + "']");
-    if (activeBtn) activeBtn.classList.add("active");
+function switchCat(id) {
+    activeCat = id;
+    elPanelCats.querySelectorAll(".ops-cat-btn").forEach(function(b) { b.classList.remove("active"); });
+    elPanelTags.querySelectorAll(".ops-cat-panel").forEach(function(p) { p.classList.remove("active"); });
+    var panel = document.getElementById("ops-cat-" + id);
+    if (panel) panel.classList.add("active");
+    elPanelCats.querySelector('[data-cat="' + id + '"]').classList.add("active");
 }
 
+// ── Tag operations ──
 function addTag(zh, en, color) {
     if (addedTags[zh]) return;
-    addedTags[zh] = {zh: zh, en: en, color: color};
-    elTagsZh.appendChild(createChip(zh, color, zh));
-    elTagsEn.appendChild(createChip(en, color, zh));
-    rebuildText();
+    addedTags[zh] = {zh:zh, en:en, color:color};
+    renderTags();
 }
+function removeTag(zh) { delete addedTags[zh]; renderTags(); }
 
-function removeTag(zh) {
-    delete addedTags[zh];
-    refreshTags();
-}
+function renderTags() {
+    elTagsZh.innerHTML = ""; elTagsEn.innerHTML = "";
+    Object.keys(addedTags).forEach(function(k) {
+        var t = addedTags[k];
+        var zhChip = document.createElement("span");
+        zhChip.className = "ops-chip";
+        zhChip.style.background = t.color + "18";
+        zhChip.style.borderColor = t.color + "40";
+        zhChip.style.color = t.color;
+        zhChip.innerHTML = t.zh + '<span class="chip-x" onclick="event.stopPropagation();removeTag(\'' + k + '\')">×</span>';
+        elTagsZh.appendChild(zhChip);
 
-function refreshTags() {
-    elTagsZh.innerHTML = "";
-    elTagsEn.innerHTML = "";
-    Object.keys(addedTags).forEach(function(zh) {
-        var t = addedTags[zh];
-        elTagsZh.appendChild(createChip(zh, t.color, zh));
-        elTagsEn.appendChild(createChip(t.en, t.color, zh));
+        var enChip = document.createElement("span");
+        enChip.className = "ops-chip";
+        enChip.style.background = t.color + "18";
+        enChip.style.borderColor = t.color + "40";
+        enChip.style.color = t.color;
+        enChip.innerHTML = t.en + '<span class="chip-x" onclick="event.stopPropagation();removeTag(\'' + k + '\')">×</span>';
+        elTagsEn.appendChild(enChip);
     });
     rebuildText();
 }
 
 function rebuildText() {
-    var parts = getTagParts();
-    var prefix = getCustomPrefix();
-    var tagStr = parts.zhParts.join(", ");
-
-    if (prefix && tagStr) {
-        elZh.value = prefix + ", " + tagStr;
-    } else if (prefix) {
-        elZh.value = prefix;
-    } else {
-        elZh.value = tagStr;
-    }
-    elEn.value = parts.enParts.join(", ");
-}
-
-function togglePanel(e) {
-    if (e) e.stopPropagation();
-    var isOpen = elPanel.classList.contains("open");
-    if (isOpen) {
-        elPanel.classList.remove("open");
-        elOverlay.classList.remove("open");
-    } else {
-        elPanel.classList.add("open");
-        elOverlay.classList.add("open");
-    }
-}
-
-function closePanel() {
-    elPanel.classList.remove("open");
-    elOverlay.classList.remove("open");
-}
-
-document.addEventListener("DOMContentLoaded", function() {
-    elZh = document.getElementById("ps-zh");
-    elEn = document.getElementById("ps-en");
-    elTagsZh = document.getElementById("ps-tags-zh");
-    elTagsEn = document.getElementById("ps-tags-en");
-    elPanel = document.getElementById("ps-panel");
-    elOverlay = document.getElementById("ps-panel-overlay");
-    elPanelCats = document.getElementById("ps-panel-cats");
-    elPanelTags = document.getElementById("ps-panel-tags");
-
-    buildPanel();
-
-    if (elZh) {
-        elZh.addEventListener("input", function() {
-            var tagStr = getTagParts().zhParts.join(", ");
-            if (!tagStr) return;
-            if (!elZh.value.endsWith(", " + tagStr)) {
-                addedTags = {};
-                elTagsZh.innerHTML = "";
-                elTagsEn.innerHTML = "";
-            }
-        });
-    }
-
-    document.querySelector(".ps-main").addEventListener("click", function(e) {
-        if (!elPanel.classList.contains("open")) return;
-        if (e.target.closest("#ps-toggle-btn") || e.target.closest("#ps-panel")) return;
-        closePanel();
+    var zhParts = [], enParts = [];
+    Object.keys(addedTags).forEach(function(k) {
+        zhParts.push(k); enParts.push(addedTags[k].en);
     });
-});
+    elZh.value = zhParts.join(", ");
+    elEn.value = enParts.join(", ");
+}
 
-// ============================================================
-// SEARCH
-// ============================================================
-function filterPrompts() {
-    var q = (document.getElementById("ps-search").value || "").toLowerCase();
-    var panels = document.querySelectorAll(".ps-cat-panel");
-    panels.forEach(function(panel) {
-        var tags = panel.querySelectorAll(".ps-tag");
-        var hasMatch = false;
-        tags.forEach(function(tag) {
-            var text = (tag.textContent + " " + tag.title).toLowerCase();
-            if (!q || text.indexOf(q) !== -1) {
-                tag.style.display = "";
-                hasMatch = true;
-            } else {
-                tag.style.display = "none";
-            }
+function onZhInput() {
+    // User manually typed → clear all tags to avoid confusion
+    var tagStr = Object.keys(addedTags).join(", ");
+    if (tagStr && elZh.value.indexOf(tagStr) === -1) {
+        addedTags = {};
+        elTagsZh.innerHTML = "";
+        elTagsEn.innerHTML = "";
+        elEn.value = "";
+    }
+}
+
+// ── Panel ──
+function togglePanel() { elPanel.classList.toggle("open"); elOverlay.classList.toggle("open"); }
+function closePanel() { elPanel.classList.remove("open"); elOverlay.classList.remove("open"); }
+
+// ── Search ──
+function filterTags() {
+    var q = (document.getElementById("ops-search").value || "").toLowerCase();
+    document.querySelectorAll(".ops-cat-panel").forEach(function(panel) {
+        panel.querySelectorAll(".ops-tag").forEach(function(tag) {
+            var match = !q || tag.dataset.searchText.indexOf(q) !== -1;
+            tag.style.display = match ? "" : "none";
         });
-        // Show/hide the cat button
-        var catId = panel.id.replace("ps-cat-panel-", "");
-        var buttons = document.querySelectorAll(".ps-cat-btn");
-        PS_CATEGORIES.forEach(function(c, i) {
-            if (c.id === catId && buttons[i]) {
-                buttons[i].style.display = hasMatch || !q ? "" : "none";
-            }
-        });
+    });
+    elPanelCats.querySelectorAll(".ops-cat-btn").forEach(function(btn) {
+        var catId = btn.dataset.cat;
+        var panel = document.getElementById("ops-cat-" + catId);
+        if (!panel) return;
+        var total = panel.querySelectorAll('.ops-tag').length;
+        var hidden = panel.querySelectorAll('.ops-tag[style*="display: none"]').length;
+        btn.style.opacity = (!q || hidden < total) ? "1" : "0.3";
     });
 }
 
-// ============================================================
-// TEXT BOX OPERATIONS
-// ============================================================
-function copyBox(boxId) {
-    var box = document.getElementById(boxId);
+// ── Actions ──
+function copyWs(id) {
+    var box = document.getElementById("ws-" + id);
     if (!box || !box.value.trim()) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(box.value).then(function() {
-            var btn = document.querySelector("#" + boxId).closest(".ps-box-group").querySelector(".btn-copy-sm");
-            if (btn) { var orig = btn.textContent; btn.textContent = "✓"; setTimeout(function() { btn.textContent = orig; }, 1200); }
-        });
-    } else {
-        box.select();
-        document.execCommand("copy");
-    }
+    navigator.clipboard.writeText(box.value).then(function() { showToast("已复制 ✓", "success"); }).catch(function() { box.select(); document.execCommand("copy"); });
 }
-
-function clearPsBuilder() {
-    addedTags = {};
-    elZh.value = "";
-    elEn.value = "";
-    elTagsZh.innerHTML = "";
-    elTagsEn.innerHTML = "";
-}
-
-function translatePsPrompt() {
-    var zhBox = document.getElementById("ps-zh");
-    var enBox = document.getElementById("ps-en");
-    var btn = document.getElementById("btn-ps-translate");
-    var text = zhBox.value.trim();
+function clearAll() { addedTags = {}; elZh.value = ""; elEn.value = ""; renderTags(); }
+function translateAll() {
+    var text = elZh.value.trim();
     if (!text) return;
-
-    btn.disabled = true;
-    btn.textContent = "⏳ 翻译中...";
-
-    fetch("/api/translate", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({text: text})
-    })
+    fetch("/api/translate", { method: "POST", credentials: "include", headers: {"Content-Type":"application/json"}, body: JSON.stringify({text:text}) })
     .then(function(r) { return r.json(); })
-    .then(function(data) {
-        btn.disabled = false;
-        btn.textContent = "🌐 翻译中文 → 英文";
-        if (data.translated && enBox) {
-            enBox.value = data.translated;
-        } else if (data.error) {
-            alert("翻译失败: " + data.error);
-        }
-    })
-    .catch(function() {
-        btn.disabled = false;
-        btn.textContent = "🌐 翻译中文 → 英文";
-        alert("翻译请求失败，请检查网络连接");
-    });
+    .then(function(data) { if (data.translated) { elEn.value = data.translated; showToast("翻译完成 ✓", "success"); } else showToast("翻译失败", "error"); })
+    .catch(function() { showToast("网络错误", "error"); });
 }
 </script>
 {% endblock %}

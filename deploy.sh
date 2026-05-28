@@ -1,16 +1,30 @@
-#!/bin/bash
+﻿#!/bin/bash
 # ============================================================
 #  AI 短剧剧本分析器 — 云服务器一键部署脚本
 #  适用: Alibaba Cloud Linux 3 / CentOS 8+ / RHEL 8+
-#  用法: chmod +x deploy.sh && ./deploy.sh
+#  用法: LLM_API_KEY=sk-xxx ./deploy.sh
+#        或在运行前 export LLM_API_KEY=sk-xxx
 # ============================================================
 set -e
 
 # ---- 配置区（部署前修改这里）----
-API_KEY="sk-你的真实api-key"
 APP_DIR="/home/ai-script-analyzer"
 REPO_URL="https://github.com/junzhewang00-alt/ai-script-analyzer.git"
+
+# 支付配置（可选，留空则不启用对应支付渠道）
+PAYJS_MCHID="${PAYJS_MCHID:-}"
+PAYJS_KEY="${PAYJS_KEY:-}"
+PAYJS_NOTIFY_URL="${PAYJS_NOTIFY_URL:-}"
+STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-}"
+STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
+STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
 # -----------------------------------
+
+if [ -z "${LLM_API_KEY:-}" ]; then
+    echo "错误: 请设置 LLM_API_KEY 环境变量"
+    echo "用法: LLM_API_KEY=sk-xxx ./deploy.sh"
+    exit 1
+fi
 
 echo "=== 1/7 安装系统依赖 ==="
 sudo dnf install -y python3 python3-pip python3-devel nginx git
@@ -30,10 +44,16 @@ pip install -r requirements.txt
 echo "=== 4/7 创建 .env 配置文件 ==="
 APP_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 cat > .env << ENVEOF
-LLM_API_BASE=https://api.deepseek.com/v1
-LLM_API_KEY=$API_KEY
-LLM_MODEL=deepseek-chat
-FLASK_SECRET_KEY=$APP_KEY
+LLM_API_BASE=${LLM_API_BASE:-https://api.deepseek.com/v1}
+LLM_API_KEY=${LLM_API_KEY}
+LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+FLASK_SECRET_KEY=${APP_KEY}
+PAYJS_MCHID=${PAYJS_MCHID}
+PAYJS_KEY=${PAYJS_KEY}
+PAYJS_NOTIFY_URL=${PAYJS_NOTIFY_URL}
+STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
 ENVEOF
 echo ".env 已创建 (FLASK_SECRET_KEY=$APP_KEY)"
 
