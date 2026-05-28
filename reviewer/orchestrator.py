@@ -1,5 +1,7 @@
 """审核编排器 — 串联视频处理、ASR、AI 分析、汇总"""
 
+from __future__ import annotations
+
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
