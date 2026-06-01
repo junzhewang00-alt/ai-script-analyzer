@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% block title %}Runway 批量生成 - AI 短剧剧本分析器{% endblock %}
+
+{% block head_extra %}
+<style>
+    .runway-container { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
+    .runway-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .runway-header h1 { font-size: 1.5rem; font-weight: 600; color: #e8e8ed; margin: 0; }
+    .runway-header .subtitle { font-size: 0.8rem; color: #888; margin-top: 2px; }
+
+    /* info bar */
+    .runway-info { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 0.78rem; color: #999; display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+    .runway-info .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse-dot 2s infinite; flex-shrink: 0; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .info-stats { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .info-stats span { white-space: nowrap; }
+
+    /* card grid */
+    .runway-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .job-card { background: rgba(15,15,25,0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 16px; transition: border-color 0.2s, box-shadow 0.2s; animation: card-enter 0.3s ease; }
+    @keyframes card-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .job-card:hover { border-color: rgba(255,255,255,0.14); }
+    .job-card.completed { border-color: rgba(34,197,94,0.15); }
+    .job-card.submitted, .job-card.processing { border-color: rgba(245,158,11,0.15); }
+    .job-card.just-completed { animation: complete-flash 0.8s ease; }
+    @keyframes complete-flash { 0%{box-shadow:0 0 0 rgba(34,197,94,0)} 40%{box-shadow:0 0 22px rgba(34,197,94,0.25)} 100%{box-shadow:0 0 0 rgba(34,197,94,0)} }
+
+    .job-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .job-card-id { font-size: 0.72rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+    .job-card-meta { display: flex; align-items: center; gap: 6px; }
+    .job-elapsed { font-size: 0.65rem; color: #666; font-family: monospace; }
+    .queue-pos { font-size: 0.6rem; color: #888; background: rgba(150,150,150,0.08); padding: 1px 6px; border-radius: 8px; }
+    .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 16px; font-size: 0.7rem; font-weight: 600; }
+    .status-pending { background: rgba(150,150,150,0.1); color: #888; }
+    .status-submitted { background: rgba(59,130,246,0.12); color: #60a5fa; }
+    .status-processing { background: rgba(245,158,11,0.12); color: #fbbf24; animation: pulse-badge 1.5s infinite; }
+    @keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .status-completed { background: rgba(34,197,94,0.12); color: #4ade80; }
+    .status-failed,.status-error { background: rgba(239,68,68,0.12); color: #f87171; }
+
+    .job-card textarea { width: 100%; min-height: 56px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; padding: 10px; color: #e0e0e0; font-size: 0.82rem; font-family: inherit; resize: vertical; margin-bottom: 8px; box-sizing: border-box; }
+    .job-card textarea:focus { outline: none; border-color: rgba(96,165,250,0.4); }
+
+    .params-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .params-row select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 6px; color: #e0e0e0; font-size: 0.72rem; cursor: pointer; }
+    .params-row select option { background: #1a1a2e; color: #e0e0e0; }
+    .params-row select:focus { outline: none; border-color: rgba(96,165,250,0.4); }
+    .params-row select:disabled { opacity: 0.35; }
+
+    /* image upload */
+    .image-upload-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .image-upload-area { flex: 1; position: relative; border: 1px dashed rgba(255,255,255,0.12); border-radius: 7px; padding: 8px 10px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: border-color 0.2s; min-height: 32px; }
+    .image-upload-area:hover { border-color: rgba(96,165,250,0.35); background: rgba(96,165,250,0.04); }
+    .image-upload-area.has-image { border-style: solid; border-color: rgba(34,197,94,0.25); background: rgba(34,197,94,0.03); }
+    .image-upload-area.uploading { border-color: rgba(96,165,250,0.5); background: rgba(96,165,250,0.06); pointer-events: none; animation: upload-pulse 1.2s infinite; }
+    @keyframes upload-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+    .image-upload-area .upload-spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; margin-right: 4px; }
+    .image-upload-area.uploading .upload-spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .image-upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .image-upload-icon { font-size: 1rem; opacity: 0.5; }
+    .image-upload-text { font-size: 0.72rem; color: #777; }
+    .image-upload-filename { font-size: 0.7rem; color: #999; font-family: monospace; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .image-preview-thumb { width: 48px; height: 32px; border-radius: 5px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
+    .image-remove-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 1rem; padding: 1px 5px; border-radius: 3px; }
+    .image-remove-btn:hover { background: rgba(239,68,68,0.12); }
+
+    .result-url { margin-top: 8px; font-size: 0.75rem; word-break: break-all; }
+    .result-url a { color: #60a5fa; text-decoration: none; }
+    .result-url a:hover { text-decoration: underline; }
+
+    /* buttons */
+    .btn-save { display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; border-radius: 8px; color: white; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: transform 0.12s, box-shadow 0.2s; }
+    .btn-save:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(99,102,241,0.3); }
+    .btn-save:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-clear { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #f87171; font-size: 0.85rem; cursor: pointer; }
+    .btn-clear:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); }
+    .btn-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; border-radius: 8px; color: white; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: transform 0.12s, box-shadow 0.2s; }
+    .btn-trigger:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(34,197,94,0.3); }
+    .btn-trigger:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .model-warn { font-size: 0.65rem; color: #f59e0b; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="runway-container">
+    <div class="runway-header">
+        <div>
+            <h1>🎞 Runway 批量生成</h1>
+            <div class="subtitle">网页自动提交 · 不消耗积分 · 每 10 分钟 2 个任务</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn-save" id="btn-save" onclick="savePrompts()">保存到队列</button>
+            <button class="btn-trigger" id="btn-trigger" onclick="triggerSubmit()">立即提交</button>
+            <button class="btn-clear" onclick="clearAll()" title="清空所有提示词和状态">清空列表</button>
+        </div>
+    </div>
+
+    <div class="runway-info">
+        <div style="display:flex;align-items:center;gap:8px;">
+            <div class="dot"></div>
+            <span>实时状态 · SSE 推送 · <span id="mode-indicator">检测中...</span> · <span id="rate-limit-info">每 10 分钟 2 个任务</span></span>
+        </div>
+        <div class="info-stats" id="summary-inline"></div>
+    </div>
+
+    <div class="runway-grid" id="job-grid"></div>
+</div>
+
+<script>
+// ============ 模型能力配置 ============
+const MODEL_CAPS = {
+    "seedance2": { label: "Seedance 2.0", brand: "ByteDance", durations: [4,5,6,7,8,9,10,11,12,13,14,15], defaultDuration: 5, resolutions: ["480p","720p","1080p"], defaultResolution: "720p", note: "" },
+    "seedance":  { label: "Seedance", brand: "ByteDance", durations: [4,5,6,7,8,9,10], defaultDuration: 5, resolutions: ["480p","720p","1080p"], defaultResolution: "720p", note: "" },
+    "gen4.5":    { label: "Gen-4.5", brand: "Runway", durations: [2,3,4,5,6,7,8,9,10], defaultDuration: 6, resolutions: ["720p","1080p","2K"], defaultResolution: "1080p", note: "" },
+    "gen4":      { label: "Gen-4", brand: "Runway", durations: [2,3,4,5,6,7,8,9,10], defaultDuration: 5, resolutions: ["720p","1080p","2K"], defaultResolution: "1080p", note: "" },
+    "gen4-turbo":{ label: "Gen-4 Turbo", brand: "Runway", durations: [2,3,4,5,6,7,8,9,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "gen3-alpha":{ label: "Gen-3 Alpha", brand: "Runway", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "gen3-turbo":{ label: "Gen-3 Turbo", brand: "Runway", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "kling3":    { label: "Kling 3.0 Pro", brand: "Kling", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "kling":     { label: "Kling", brand: "Kling", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "veo3":      { label: "Veo 3.1", brand: "Google", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+    "veo":       { label: "Veo", brand: "Google", durations: [4,5,8,10], defaultDuration: 5, resolutions: ["720p","1080p"], defaultResolution: "1080p", note: "" },
+};
+
+// ============ state ============
+let pollTimer = null, _polling = false, uploadedImages = {}, sseSource = null, currentMode = 'browser';
+let _submissionTimestamps = [];  // 提交记录时间戳
+let _rateLimitTimer = null;
+let _submitting = false;  // 防止提交期间定时器干预按钮状态
+
+(async function init() {
+    await loadStatus();
+    await checkMode();
+    connectSSE();
+    updateRateLimitUI();
+    _rateLimitTimer = setInterval(updateRateLimitUI, 1000);
+})();
+
+function checkRateLimit() {
+    const now = Date.now();
+    const windowMs = 10 * 60 * 1000;  // 10 分钟窗口
+    const maxSubmissions = 2;
+    const recent = _submissionTimestamps.filter(t => now - t < windowMs);
+    _submissionTimestamps = recent;
+    if (recent.length >= maxSubmissions) {
+        const oldest = Math.min(...recent);
+        const remaining = Math.ceil((oldest + windowMs - now) / 1000);
+        return { blocked: true, remaining };
+    }
+    return { blocked: false, remaining: 0 };
+}
+
+function updateRateLimitUI() {
+    const btn = document.getElementById('btn-trigger');
+    const infoEl = document.getElementById('rate-limit-info');
+    if (!btn || !infoEl) return;
+    if (_submitting) return;  // 提交进行中，不干预按钮状态
+    const rl = checkRateLimit();
+    if (rl.blocked) {
+        btn.disabled = true;
+        const m = Math.floor(rl.remaining / 60);
+        const s = rl.remaining % 60;
+        btn.textContent = m > 0 ? `${m}m${s}s 后可提交` : `${s}s 后可提交`;
+        infoEl.textContent = `下次可提交: ${m > 0 ? m+'分'+s+'秒' : s+'秒'}`;
+        infoEl.style.color = '#f59e0b';
+    } else {
+        btn.disabled = false;
+        btn.textContent = '立即提交';
+        infoEl.textContent = '每 10 分钟 2 个任务';
+        infoEl.style.color = '';
+    }
+}
+
+async function checkMode() {
+    try {
+        const r = await fetch('/api/runway/mode');
+        const d = await r.json();
+        currentMode = d.recommended;
+        const dot = document.querySelector('.runway-info .dot');
+        if (dot) {
+            dot.style.background = d.api_available ? '#22c55e' : '#f59e0b';
+            dot.title = d.api_available ? 'API 模式可用' : '浏览器模式';
+        }
+        const indicator = document.getElementById('mode-indicator');
+        if (indicator) {
+            const primary = d.recommended === 'browser' ? '浏览器模式 (免积分)' : 'API 模式';
+            indicator.textContent = primary;
+            indicator.style.color = d.recommended === 'browser' ? '#4ade80' : '#f59e0b';
+        }
+    } catch(e) {
+        document.getElementById('mode-indicator').textContent = '模式检测失败';
+    }
+}
+
+function connectSSE() {
+    if (sseSource) { sseSource.close(); }
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    sseSource = new EventSource('/api/runway/stream');
+    sseSource.onmessage = function(e) {
+        try {
+            const msg = JSON.parse(e.data);
+            console.log('SSE:',msg.event,msg.data?.jobs?'jobs='+msg.data.jobs.length:'');
+            if (msg.event === 'update' || msg.event === 'init') {
+                if (msg.data && msg.data.jobs) renderJobs(msg.data.jobs);
+                else loadStatus();
+            } else if (msg.event === 'error') {
+                showToast(msg.data && msg.data.message || '后台任务异常', 'error');
+            }
+        } catch(ex) { console.error('SSE parse error:',ex); }
+    };
+    sseSource.onerror = function() {
+        sseSource.close();
+        sseSource = null;
+        if (!pollTimer) pollTimer = setInterval(loadStatus, 5000);
+        setTimeout(connectSSE, 30000);
+    };
+}
+
+// ============ model change → cascade duration + resolution ============
+function onModelChange(sel) {
+    const jobId = parseInt(sel.dataset.jobId);
+    const card = sel.closest('.job-card');
+    const model = sel.value;
+    const caps = MODEL_CAPS[model] || MODEL_CAPS["seedance2"];
+
+    const durSel = card.querySelector('select[data-field="duration"]');
+    if (durSel) {
+        durSel.innerHTML = caps.durations.map(d =>
+            `<option value="${d}" ${d===caps.defaultDuration?'selected':''}>${d}s</option>`
+        ).join('');
+    }
+
+    const resSel = card.querySelector('select[data-field="resolution"]');
+    if (resSel) {
+        resSel.innerHTML = caps.resolutions.map(r =>
+            `<option value="${r}" ${r===caps.defaultResolution?'selected':''}>${r}</option>`
+        ).join('');
+    }
+
+    const noteEl = card.querySelector('.model-note');
+    if (noteEl) noteEl.textContent = caps.note || '';
+
+    markDirty();
+}
+
+// ============ render ============
+function renderJobs(jobs) {
+    const grid = document.getElementById('job-grid');
+    if (!jobs || jobs.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#555;">'+
+            '<div style="font-size:3rem;margin-bottom:16px;opacity:0.3;">🎞</div>'+
+            '<div style="font-size:1rem;font-weight:600;color:#777;margin-bottom:6px;">暂无任务</div>'+
+            '<div style="font-size:0.78rem;color:#666;margin-bottom:18px;">在下方填写提示词后点击「保存到队列」，或点击下方按钮初始化 10 个空槽位</div>'+
+            '<button onclick="savePrompts()" style="padding:8px 20px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:7px;color:#60a5fa;font-size:0.82rem;cursor:pointer;">初始化任务槽位</button>'+
+            '</div>';
+        updateSummary(jobs); return;
+    }
+    jobs.forEach(j => { if (j.image_path && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_path; });
+
+    const existingCards = grid.querySelectorAll('.job-card');
+    if (existingCards.length !== jobs.length) {
+        console.log('renderJobs: full rebuild, cards=',existingCards.length,'jobs=',jobs.length,'job4=',jobs.find(j=>j.id===4)?.prompt?.slice(0,20));
+        grid.innerHTML = buildCardsHTML(jobs);
+        updateSummary(jobs); return;
+    }
+
+    // diff update
+    const queueMap = computeQueuePositions(jobs);
+    existingCards.forEach(card => {
+        const jobId = parseInt(card.dataset.jobId);
+        const job = jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        // update card class for status styling
+        card.className = 'job-card ' + job.status;
+
+        const badge = card.querySelector('.status-badge');
+        if (badge) {
+            const labels = {pending:'待提交',submitted:'已提交',processing:'生成中',completed:'已完成',failed:'失败',error:'错误'};
+            badge.className = 'status-badge status-' + job.status;
+            badge.textContent = labels[job.status] || job.status;
+        }
+
+        const elapsed = card.querySelector('[data-field="elapsed"]');
+        if (elapsed) {
+            if ((job.status==='submitted'||job.status==='processing') && job.created_at) {
+                elapsed.textContent = formatElapsed(job.created_at);
+                elapsed.style.display = '';
+            } else {
+                elapsed.style.display = 'none';
+            }
+        }
+
+        const queueEl = card.querySelector('[data-field="queue"]');
+        const qPos = queueMap[jobId];
+        if (queueEl) {
+            if (qPos) { queueEl.textContent = '排队 #' + qPos; queueEl.style.display = ''; }
+            else { queueEl.style.display = 'none'; }
+        } else if (qPos) {
+            const idSpan = card.querySelector('.job-card-id');
+            if (idSpan) {
+                const span = document.createElement('span');
+                span.className = 'queue-pos';
+                span.setAttribute('data-field', 'queue');
+                span.textContent = '排队 #' + qPos;
+                idSpan.appendChild(span);
+            }
+        }
+
+        const uploadArea = card.querySelector('.image-upload-area');
+        if (uploadArea && uploadedImages[jobId]) {
+            const path = uploadedImages[jobId];
+            const fname = path.replace(/\\/g, '/').split('/').pop();
+            const ps = path.startsWith('/uploads/') ? path : '/uploads/runway/' + fname;
+            uploadArea.classList.add('has-image');
+            const icon = uploadArea.querySelector('.image-upload-icon');
+            const text = uploadArea.querySelector('.image-upload-text');
+            const fnEl = uploadArea.querySelector('.image-upload-filename');
+            if (icon) icon.textContent = '';
+            if (text) text.textContent = '';
+            if (fnEl) fnEl.textContent = fname;
+            let thumb = uploadArea.querySelector('.image-preview-thumb');
+            if (!thumb) { thumb = document.createElement('img'); thumb.className='image-preview-thumb'; thumb.alt='preview'; uploadArea.insertBefore(thumb, uploadArea.firstChild); }
+            if (thumb.src !== ps) thumb.src = ps;
+            thumb.style.display = '';
+        }
+
+        let resultEl = card.querySelector('.result-url');
+        if (job.status === 'completed' && job.result_url) {
+            if (!resultEl) { resultEl = document.createElement('div'); resultEl.className='result-url'; card.appendChild(resultEl); }
+            resultEl.innerHTML = '<a href="'+escapeHtml(job.result_url)+'" target="_blank">查看视频</a>';
+        } else if ((job.status==='failed'||job.status==='error') && job.error) {
+            if (!resultEl) { resultEl = document.createElement('div'); resultEl.className='result-url'; card.appendChild(resultEl); }
+            resultEl.innerHTML = '<span style="color:#f87171">'+escapeHtml(job.error)+'</span>';
+        } else if (resultEl) { resultEl.remove(); }
+    });
+    updateSummary(jobs);
+}
+
+function buildCardsHTML(jobs) {
+    const queueMap = computeQueuePositions(jobs);
+    return jobs.map(j => {
+        const caps = MODEL_CAPS[j.model] || MODEL_CAPS["seedance2"];
+        const labels = {pending:'待提交',submitted:'已提交',processing:'生成中',completed:'已完成',failed:'失败',error:'错误'};
+        const hasImg = uploadedImages[j.id];
+        const queuePos = queueMap[j.id];
+        const imgBase = hasImg ? hasImg.replace(/\\/g, '/') : '';
+        const ps = hasImg ? (hasImg.startsWith('/uploads/') ? hasImg : '/uploads/runway/' + imgBase.split('/').pop()) : '';
+        const fn = imgBase ? imgBase.split('/').pop() : '';
+
+        return `<div class="job-card ${j.status}" data-job-id="${j.id}">
+            <div class="job-card-header">
+                <span class="job-card-id">#${j.id}${queuePos?` <span class="queue-pos" data-field="queue">排队 #${queuePos}</span>`:''}</span>
+                <div class="job-card-meta">
+                    ${(j.status==='submitted'||j.status==='processing')&&j.created_at?`<span class="job-elapsed" data-field="elapsed">${formatElapsed(j.created_at)}</span>`:''}
+                    <span class="status-badge status-${j.status}">${labels[j.status]||j.status}</span>
+                </div>
+            </div>
+            <textarea placeholder="描述你想要生成的视频画面..." data-job-id="${j.id}" onchange="markDirty()">${escapeHtml(j.prompt||'')}</textarea>
+            <div class="params-row">
+                <select data-job-id="${j.id}" data-field="model" onchange="onModelChange(this)" style="flex:2">
+                    <option value="seedance2" ${j.model==='seedance2'?'selected':''}>Seedance 2.0</option>
+                    <option value="seedance" ${j.model==='seedance'?'selected':''}>Seedance</option>
+                    <option disabled>-- Runway --</option>
+                    <option value="gen4.5" ${j.model==='gen4.5'?'selected':''}>Gen-4.5</option>
+                    <option value="gen4" ${j.model==='gen4'?'selected':''}>Gen-4</option>
+                    <option value="gen4-turbo" ${j.model==='gen4-turbo'?'selected':''}>Gen-4 Turbo</option>
+                    <option value="gen3-alpha" ${j.model==='gen3-alpha'?'selected':''}>Gen-3 Alpha</option>
+                    <option value="gen3-turbo" ${j.model==='gen3-turbo'?'selected':''}>Gen-3 Turbo</option>
+                    <option disabled>-- 第三方 --</option>
+                    <option value="kling3" ${j.model==='kling3'?'selected':''}>Kling 3.0 Pro</option>
+                    <option value="kling" ${j.model==='kling'?'selected':''}>Kling</option>
+                    <option value="veo3" ${j.model==='veo3'?'selected':''}>Veo 3.1</option>
+                    <option value="veo" ${j.model==='veo'?'selected':''}>Veo</option>
+                </select>
+                <select data-job-id="${j.id}" data-field="duration" onchange="markDirty()" style="width:58px">
+                    ${caps.durations.map(d => `<option value="${d}" ${(j.duration||caps.defaultDuration)==d?'selected':''}>${d}s</option>`).join('')}
+                </select>
+                <select data-job-id="${j.id}" data-field="resolution" onchange="markDirty()" style="width:66px">
+                    ${caps.resolutions.map(r => `<option value="${r}" ${(j.resolution||caps.defaultResolution)==r?'selected':''}>${r}</option>`).join('')}
+                </select>
+            </div>
+            ${caps.note ? `<div class="model-warn">${caps.note}</div>` : ''}
+            <div class="image-upload-row">
+                <div class="image-upload-area${hasImg?' has-image':''}" id="dropzone-${j.id}" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${j.id})">
+                    <input type="file" id="file-input-${j.id}" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${j.id})"/>
+                    ${ps?`<img class="image-preview-thumb" src="${escapeHtml(ps)}" alt="preview"/>`:''}
+                    <span class="image-upload-icon">${hasImg?'':''}</span>
+                    <span class="image-upload-text">${hasImg?'':''}</span>
+                    ${fn?`<span class="image-upload-filename">${escapeHtml(fn)}</span>`:`<span class="image-upload-text">上传参考图</span>`}
+                </div>
+                ${hasImg?`<button class="image-remove-btn" onclick="removeImage(${j.id})">x</button>`:''}
+            </div>
+            ${j.status==='completed'&&j.result_url?`<div class="result-url"><a href="${escapeHtml(j.result_url)}" target="_blank">查看视频</a></div>`:''}
+            ${(j.status==='failed'||j.status==='error')&&j.error?`<div class="result-url" style="color:#f87171">${escapeHtml(j.error)}</div>`:''}
+        </div>`;
+    }).join('');
+}
+
+function updateSummary(jobs) {
+    const el = document.getElementById('summary-inline');
+    if (!jobs||!jobs.length) { el.innerHTML = ''; return; }
+    const c = jobs.filter(j=>j.status==='completed').length;
+    const p = jobs.filter(j=>j.status==='submitted'||j.status==='processing').length;
+    const w = jobs.filter(j=>j.status==='pending').length;
+    const f = jobs.filter(j=>j.status==='failed'||j.status==='error').length;
+    const t = jobs.filter(j=>j.prompt).length;
+    el.innerHTML = `
+        <span>共 <strong>${t}</strong> 个任务</span>
+        <span style="color:#4ade80">${c}</span>
+        ${p>0?`<span style="color:#fbbf24">${p}</span>`:''}
+        ${w>0?`<span style="color:#888">${w}</span>`:''}
+        ${f>0?`<span style="color:#f87171">${f}</span>`:''}`;
+}
+
+// ============ upload ============
+async function uploadImage(file, jobId) {
+    const dz = document.getElementById('dropzone-'+jobId);
+    const txt = dz.querySelector('.image-upload-text');
+    const origText = txt ? txt.textContent : '';
+    dz.classList.add('uploading');
+    if (txt) txt.textContent = '上传中...';
+    const fd = new FormData(); fd.append('image',file); fd.append('job_id',String(jobId));
+    try {
+        const resp = await fetch('/api/runway/upload-image', {method:'POST',body:fd});
+        const data = await resp.json();
+        if (data.status==='ok') { uploadedImages[jobId]=data.path; markDirty(); await loadStatus(); showToast('Job #'+jobId+' 图片已上传', 'success'); }
+        else showToast(data.error||'上传失败', 'error');
+    } catch(e) { showToast('网络错误', 'error'); }
+    dz.classList.remove('uploading');
+    if (txt) txt.textContent = origText;
+}
+function onFilePicked(input,jobId) { const f=input.files[0]; if(f) uploadImage(f,jobId); }
+function onDragOver(e) { e.preventDefault(); e.currentTarget.style.borderColor='rgba(96,165,250,0.5)'; }
+function onDragLeave(e) { e.preventDefault(); e.currentTarget.style.borderColor=''; }
+function onDrop(e,jobId) { e.preventDefault(); e.currentTarget.style.borderColor=''; if(e.dataTransfer.files.length) uploadImage(e.dataTransfer.files[0],jobId); }
+function removeImage(jobId) { delete uploadedImages[jobId]; markDirty(); loadStatus(); showToast('Job #'+jobId+' 图片已移除', 'success'); }
+
+// ============ poll ============
+async function loadStatus() {
+    if(_polling)return; _polling=true;
+    try { const r=await fetch('/api/runway/status'); const d=await r.json(); if(d.jobs) { console.log('loadStatus: got',d.jobs.length,'jobs, job4=',d.jobs.find(j=>j.id===4)?.prompt?.slice(0,20),'job5=',d.jobs.find(j=>j.id===5)?.prompt?.slice(0,20)); renderJobs(d.jobs); } } catch(e){console.error('loadStatus error:',e);}
+    _polling=false;
+}
+
+// ============ save ============
+let _dirty=false; function markDirty(){_dirty=true;}
+async function savePrompts() {
+    const btn=document.getElementById('btn-save'); btn.disabled=true; btn.textContent='保存中...';
+    const cards=document.querySelectorAll('.job-card');
+    const prompts=[];
+    if(!cards.length) {
+        for(let i=1;i<=10;i++) prompts.push({id:i,prompt:'',image_path:uploadedImages[i]||'',model:'gen4.5',duration:5,resolution:'720p'});
+    } else {
+        cards.forEach(card=>{
+            try {
+                const jid=parseInt(card.dataset.jobId);
+                if(isNaN(jid)||jid<1||jid>10) return;
+                const ta=card.querySelector('textarea');
+                const ms=card.querySelector('select[data-field=model]');
+                const ds=card.querySelector('select[data-field=duration]');
+                const rs=card.querySelector('select[data-field=resolution]');
+                prompts.push({id:jid,prompt:ta?ta.value:'',image_path:uploadedImages[jid]||'',model:ms?ms.value:'gen4.5',duration:ds?parseInt(ds.value):5,resolution:rs?rs.value:'720p'});
+            } catch(e){ console.error('savePrompts card read error:',e); }
+        });
+    }
+    console.log('savePrompts: collected',prompts.length,'prompts');
+    try {
+        console.log('savePrompts: sending',prompts.length,'prompts, job4=',prompts.find(p=>p.id===4)?.prompt?.slice(0,20),'job5=',prompts.find(p=>p.id===5)?.prompt?.slice(0,20));
+        const resp=await fetch('/api/runway/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts})});
+        const data=await resp.json();
+        console.log('savePrompts: response',data);
+        if(data.status==='ok'){showToast('已保存 '+data.saved+' 个任务到队列','success');_dirty=false;await loadStatus();btn.disabled=false;btn.textContent='保存到队列';return true;}
+        else showToast(data.error||'保存失败','error');
+    } catch(e){console.error('savePrompts error:',e);showToast('网络错误，请检查服务器是否运行','error');}
+    btn.disabled=false; btn.textContent='保存到队列'; return false;
+}
+
+async function clearAll(){
+    if(!confirm('确定清空全部 10 个任务的提示词和状态？此操作不可撤销。')) return;
+    try {
+        const resp=await fetch('/api/runway/clear',{method:'POST'});
+        const data=await resp.json();
+        if(data.status==='ok'){showToast('已清空','success');setTimeout(()=>location.reload(),800);}
+        else showToast(data.error||'清空失败','error');
+    } catch(e){showToast('网络错误','error');}
+}
+
+async function triggerSubmit(){
+    if (_submitting) return;
+    _submitting = true;
+    const btn = document.getElementById('btn-trigger');
+    btn.disabled = true; btn.textContent = '提交中...';
+    try {
+        if (_dirty) {
+            btn.textContent = '保存中...';
+            const saved = await savePrompts();
+            if (!saved) { updateRateLimitUI(); _submitting = false; return; }
+        }
+        btn.textContent = '运行中...';
+        const resp = await fetch('/api/runway/trigger', {method:'POST'});
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            _submissionTimestamps.push(Date.now());
+            showToast('已触发提交，后台运行中', 'success');
+        } else if (data.status === 'busy') {
+            showToast(data.message, 'warning');
+        } else {
+            showToast(data.error || '触发失败', 'error');
+        }
+    } catch(e) {
+        console.error('triggerSubmit error:', e);
+        showToast('网络错误，请检查服务器是否运行', 'error');
+    }
+    _submitting = false;
+    updateRateLimitUI();
+}
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function computeQueuePositions(jobs) {
+    const pending = jobs.filter(j => j.status === 'pending' && j.prompt);
+    pending.sort((a, b) => a.id - b.id);
+    const map = {};
+    pending.forEach((j, idx) => { map[j.id] = idx + 1; });
+    return map;
+}
+
+function formatElapsed(isoStr) {
+    if (!isoStr) return '';
+    const now = Date.now();
+    const elapsed = Math.floor((now - new Date(isoStr).getTime()) / 1000);
+    if (elapsed < 0) return '';
+    if (elapsed < 60) return elapsed + 's 前';
+    if (elapsed < 3600) return Math.floor(elapsed/60) + 'm 前';
+    return Math.floor(elapsed/3600) + 'h 前';
+}
+</script>
+{% endblock %}

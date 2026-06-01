@@ -1,7 +1,9 @@
 import os
+import sys
 import json
 import tempfile
 import threading
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import time
@@ -9,7 +11,7 @@ from pathlib import Path
 
 import markdown
 import bleach
-from flask import Flask, render_template, request, session, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, session, jsonify, redirect, url_for, flash, send_file, Response
 from flask_login import LoginManager, login_required, current_user
 from dotenv import load_dotenv
 
@@ -18,6 +20,13 @@ from analyzer.llm import call_llm, get_config
 from analyzer.prompts import build_analysis_tasks, SYSTEM_ROLE
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# 导入 Runway 共享配置
+sys.path.insert(0, str(Path("C:/Users/ZhuanZ/Desktop/runway-bot")))
+from runway_config import (
+    get_paths, default_jobs, default_job_template, save_config,
+    DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
+)
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -52,14 +61,14 @@ from limiter import rate_limit
 
 @app.before_request
 def _hide_api_from_public():
-    """对未登录用户隐藏 API/Pay 路由，直接返回 404（不暴露接口存在）"""
+    """对未登录用户拒绝 API/Pay 路由，返回 401"""
     if request.path.startswith("/static/") or request.path == "/favicon.ico":
         return
     if not current_user.is_authenticated:
         if request.path.startswith("/api/") or (
             request.path.startswith("/pay/") and request.path not in ("/pay/notify", "/pay/webhook")
         ):
-            return jsonify({"error": "Not Found"}), 404
+            return jsonify({"error": "请先登录"}), 401
 
 UPLOAD_FOLDER = tempfile.gettempdir()
 JOBS_DIR = BASE_DIR / ".jobs"
@@ -224,9 +233,14 @@ _load_jobs()
 
 
 @app.route("/")
-@login_required
 def index():
-    return render_template("index.html")
+    if current_user.is_authenticated:
+        return render_template("index.html")
+    # Serve React landing page from static/landing/
+    landing_path = os.path.join(os.path.dirname(__file__), "static", "landing", "index.html")
+    if os.path.exists(landing_path):
+        return send_file(landing_path)
+    return render_template("landing.html")
 
 
 @app.route("/prompts")
@@ -284,7 +298,7 @@ def analyze():
     })
     _save_job(job_id)
 
-    return redirect(url_for("manual_analyze", job_id=job_id), code=303)
+    return redirect(url_for("manual_analyze", job_id=job_id, auto="1"), code=303)
 
 
 @app.route("/analyze/<job_id>")
@@ -821,6 +835,7 @@ def api_chat():
     """侧边栏 AI 助手对话"""
     data = request.get_json(silent=True) or {}
     user_message = data.get("message", "").strip()
+    context = data.get("context", {})  # {job_id, script_preview, page_type}
     if not user_message:
         return jsonify({"reply": "请输入内容"})
 
@@ -829,6 +844,19 @@ def api_chat():
         sid = _get_sid()
         sc = _api_configs.get(sid, {})
 
+        # 构建上下文提示
+        ctx_block = ""
+        page_type = context.get("page_type", "")
+        if page_type == "manual" and context.get("script_preview"):
+            ctx_block = (
+                f"【当前上下文】用户正在查看剧本分析结果。"
+                f"剧本片段: {context['script_preview'][:500]}\n\n"
+            )
+        elif page_type == "review" and context.get("job_id"):
+            ctx_block = (
+                f"【当前上下文】用户正在查看视频审核结果 (job #{context['job_id']})。\n\n"
+            )
+
         chat_prompt = (
             "【角色】你是「AI 短剧分析器」内置助手，专门解答短剧创作与分析相关问题。\n\n"
             "【能力范围】剧本分析/审核流程/积分使用/提示词技巧/短剧行业知识\n\n"
@@ -836,6 +864,7 @@ def api_chat():
             "• 回答简洁，3-5 句话以内\n"
             "• 如果不确定，直接说「建议咨询专业编剧」\n"
             "• 不讨论与短剧无关的话题\n\n"
+            f"{ctx_block}"
             f"用户: {user_message}\n助手:"
         )
 
@@ -1039,6 +1068,28 @@ def api_latest_review():
     })
 
 
+@app.route("/api/review/history")
+@login_required
+def api_review_history():
+    """获取当前用户所有审核历史"""
+    jobs = (ReviewJob.query
+            .filter_by(user_id=current_user.id)
+            .order_by(ReviewJob.id.desc())
+            .limit(50)
+            .all())
+    return jsonify({
+        "jobs": [{
+            "id": j.id,
+            "video_filename": j.video_filename,
+            "script_text": j.script_text[:200] if j.script_text else "",
+            "status": j.status,
+            "score": j.summary.overall_score if j.summary else None,
+            "passed": j.summary.passed if j.summary else None,
+            "created_at": j.created_at.isoformat() if j.created_at else None,
+        } for j in jobs]
+    })
+
+
 @app.route("/api/review/<int:job_id>/cancel", methods=["POST"])
 @login_required
 def api_cancel_review(job_id):
@@ -1084,7 +1135,17 @@ def api_run_dimension(job_id, dimension):
                 if dimension == "tech":
                     result_data = orchestrator.video.analyze_technical(vid)
                 elif dimension == "emotion":
-                    result_data = orchestrator.qwen.analyze_emotion(vid)
+                    qwen_result = orchestrator.qwen.analyze_emotion(vid)
+                    if not qwen_result.get("_fallback"):
+                        # Qwen 成功 → 合成专业审片报告（单维度无 ASR）
+                        result_data = orchestrator.synthesizer.synthesize(
+                            qwen_result=qwen_result,
+                            script_text=scr,
+                            asr_text="",
+                        )
+                        result_data["_qwen_raw"] = qwen_result
+                    else:
+                        result_data = qwen_result
                 elif dimension == "dialogue":
                     audio = orchestrator.video.extract_audio(vid)
                     asr = orchestrator.asr.transcribe(str(audio)) if audio else {"text": ""}
@@ -1117,6 +1178,347 @@ def api_run_dimension(job_id, dimension):
     t.start()
 
     return jsonify({"status": "started", "dimension": dimension})
+
+
+# ============ Runway 批量生成 ============
+
+# 图片上传限制: 10 MB
+RUNWAY_MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+RUNWAY_JOBS_PATH = get_paths()["config"]
+RUNWAY_UPLOAD_DIR = BASE_DIR / "uploads" / "runway"
+RUNWAY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# 支持的图片格式
+RUNWAY_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".tif", ".heic", ".heif"}
+
+
+@app.route("/runway")
+@login_required
+def runway_page():
+    return render_template("runway.html")
+
+
+@app.route("/api/runway/upload-image", methods=["POST"])
+@login_required
+def api_runway_upload_image():
+    """上传参考图到服务器，返回存储路径"""
+    if "image" not in request.files:
+        return jsonify({"error": "没有上传文件"}), 400
+
+    file = request.files["image"]
+    if not file.filename:
+        return jsonify({"error": "文件名为空"}), 400
+
+    # 大小检查
+    file.seek(0, 2)  # seek to end
+    file_size = file.tell()
+    file.seek(0)  # reset
+    if file_size > RUNWAY_MAX_IMAGE_SIZE:
+        return jsonify({"error": f"图片过大 ({file_size // 1024}KB)，最大 10MB"}), 400
+
+    # 获取 job_id 参数
+    job_id = request.form.get("job_id", "0")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in RUNWAY_IMAGE_EXTENSIONS:
+        return jsonify({
+            "error": f"不支持的图片格式: {ext}。支持: {', '.join(sorted(RUNWAY_IMAGE_EXTENSIONS))}"
+        }), 400
+
+    # 用 uuid 避免文件名冲突
+    saved_name = f"job{job_id}_{uuid.uuid4().hex[:8]}{ext}"
+    saved_path = RUNWAY_UPLOAD_DIR / saved_name
+
+    file.save(str(saved_path))
+
+    return jsonify({
+        "status": "ok",
+        "path": str(saved_path),
+        "preview_url": f"/uploads/runway/{saved_name}",
+        "filename": file.filename,
+    })
+
+
+@app.route("/uploads/runway/<path:filename>")
+@login_required
+def serve_runway_image(filename):
+    """提供上传的参考图预览"""
+    from flask import send_from_directory
+    return send_from_directory(str(RUNWAY_UPLOAD_DIR), filename)
+
+
+@app.route("/api/runway/status")
+@login_required
+def api_runway_status():
+    """读取 Runway 任务状态（供前端轮询）"""
+    try:
+        if not RUNWAY_JOBS_PATH.exists():
+            return jsonify({"jobs": [], "empty": True})
+        with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        jobs = data.get("jobs", [])
+        # 不返回 image_path 的敏感内容给前端（可能包含本地路径）
+        safe_jobs = []
+        for j in jobs:
+            safe_jobs.append({
+                "id": j.get("id"),
+                "prompt": j.get("prompt", ""),
+                "image_path": j.get("image_path", ""),
+                "model": j.get("model", "seedance2"),
+                "duration": j.get("duration", 5),
+                "resolution": j.get("resolution", "720p"),
+                "status": j.get("status", "pending"),
+                "result_url": j.get("result_url"),
+                "error": j.get("error"),
+                "created_at": j.get("created_at"),
+                "completed_at": j.get("completed_at"),
+            })
+        return jsonify({"jobs": safe_jobs})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/runway/save", methods=["POST"])
+@login_required
+def api_runway_save():
+    """保存提示词到 JSON 文件，并重置所有任务状态为 pending"""
+    try:
+        body = request.get_json() or {}
+        prompts = body.get("prompts", [])  # [{id, prompt, image_path}, ...]
+
+        # DEBUG
+        for p in prompts:
+            if p.get("id") in (4, 5) and p.get("prompt", "").strip():
+                print(f"[SAVE DEBUG] Received job {p['id']}: prompt={p['prompt'][:40]!r}")
+        print(f"[SAVE DEBUG] Total prompts received: {len(prompts)}, non-empty: {sum(1 for p in prompts if p.get('prompt','').strip())}")
+
+        # 加载现有数据
+        if RUNWAY_JOBS_PATH.exists():
+            with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"jobs": []}
+
+        existing_jobs = {j["id"]: j for j in data.get("jobs", [])}
+
+        # 更新或创建 jobs，保持共 10 个
+        new_jobs = []
+        for i in range(1, 11):
+            # 找是否在提交的 prompts 中
+            submitted = next((p for p in prompts if p.get("id") == i), None)
+            if submitted:
+                jid = i
+                # 拷贝现有 job，避免修改 existing_jobs 引用导致 unchanged 检测失效
+                if jid in existing_jobs:
+                    job = existing_jobs[jid].copy()
+                else:
+                    job = {
+                        "id": jid,
+                        "task_id": None, "result_url": None, "error": None,
+                        "created_at": None, "completed_at": None,
+                    }
+                job["prompt"] = submitted.get("prompt", "")
+                job["image_path"] = submitted.get("image_path", "")
+                job["model"] = submitted.get("model", DEFAULT_MODEL)
+                job["duration"] = submitted.get("duration", DEFAULT_DURATION)
+                job["resolution"] = submitted.get("resolution", DEFAULT_RESOLUTION)
+                # 只要提示词没变 → 保持原状态（不重置 submitted/completed）
+                old_prompt = existing_jobs.get(jid, {}).get("prompt", "")
+                old_status = existing_jobs.get(jid, {}).get("status", "pending")
+                if old_prompt != job["prompt"]:
+                    job["status"] = "pending"
+                else:
+                    job["status"] = old_status
+                new_jobs.append(job)
+            else:
+                # 保留已有的或创建空的
+                existing = existing_jobs.get(i)
+                if existing:
+                    new_jobs.append(existing)
+                else:
+                    new_jobs.append(default_job_template(i))
+
+        data["jobs"] = new_jobs
+
+        # 内容未变化时跳过写入和推送
+        if existing_jobs and len(existing_jobs) == len(new_jobs):
+            unchanged = True
+            compare_keys = ["prompt", "image_path", "model", "duration", "resolution", "status",
+                            "task_id", "result_url", "error", "created_at", "completed_at"]
+            for j in new_jobs:
+                old = existing_jobs.get(j["id"], {})
+                for k in compare_keys:
+                    if old.get(k) != j.get(k):
+                        unchanged = False
+                        break
+                if not unchanged:
+                    break
+            if unchanged:
+                print(f"[SAVE DEBUG] Unchanged detected, skipping write")
+                return jsonify({"status": "ok", "saved": len(new_jobs), "unchanged": True})
+
+        save_config(RUNWAY_JOBS_PATH, data)
+
+        # DEBUG: verify written
+        with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
+            verify = json.load(f)
+        for j in verify.get("jobs", []):
+            if j["id"] in (4, 5) and j.get("prompt", "").strip():
+                print(f"[SAVE DEBUG] Written job {j['id']}: prompt={j['prompt'][:40]!r}")
+
+        _runway_notify_sse("update", {"jobs": new_jobs})
+        return jsonify({"status": "ok", "saved": len(new_jobs)})
+    except Exception as e:
+        import traceback
+        print(f"[SAVE ERROR] {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/runway/clear", methods=["POST"])
+@login_required
+def runway_clear():
+    """清空全部任务，重置为初始状态"""
+    try:
+        data = {"jobs": default_jobs()}
+        with open(RUNWAY_JOBS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        _runway_notify_sse("update", {"jobs": data["jobs"]})
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+RUNWAY_LOCK = threading.Lock()
+RUNWAY_SSE_LOCK = threading.Lock()
+RUNWAY_RUNNING = False
+RUNWAY_SCRIPT_DIR = RUNWAY_JOBS_PATH.parent
+
+# SSE 客户端列表（用于实时推送状态更新）
+RUNWAY_SSE_CLIENTS: list = []
+
+
+def _runway_notify_sse(event="update", data=None):
+    """向所有已连接的 SSE 客户端推送事件"""
+    stale = []
+    with RUNWAY_SSE_LOCK:
+        clients = list(RUNWAY_SSE_CLIENTS)
+    for client in clients:
+        try:
+            client.put(json.dumps({"event": event, "data": data}))
+        except Exception:
+            stale.append(client)
+    if stale:
+        with RUNWAY_SSE_LOCK:
+            for s in stale:
+                if s in RUNWAY_SSE_CLIENTS:
+                    RUNWAY_SSE_CLIENTS.remove(s)
+
+
+@app.route("/api/runway/mode")
+@login_required
+def api_runway_mode():
+    """返回当前可用的 Runway 模式。
+
+    浏览器模式 = 默认，走 Unlimited Plan Explore Mode（免积分），但选择器脆弱
+    API 模式 = 需 RUNWAYML_API_SECRET，会消耗积分，但稳定快速
+    """
+    api_key = os.environ.get("RUNWAYML_API_SECRET", "")
+    has_api = bool(api_key)
+    return jsonify({
+        "api_available": has_api,
+        "browser_available": True,
+        "recommended": "browser",  # 默认浏览器模式免积分
+        "note": "浏览器模式 = Unlimited Plan 免积分 | API 模式 = 消耗积分但更稳定",
+    })
+
+
+@app.route("/api/runway/stream")
+@login_required
+def api_runway_stream():
+    """SSE 端点 — 实时推送任务状态变化"""
+    import queue
+    q = queue.Queue()
+    with RUNWAY_SSE_LOCK:
+        RUNWAY_SSE_CLIENTS.append(q)
+
+    def generate():
+        try:
+            if RUNWAY_JOBS_PATH.exists():
+                with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                yield f"data: {json.dumps({'event': 'init', 'data': data})}\n\n"
+            while True:
+                try:
+                    msg = q.get(timeout=30)
+                    yield f"data: {json.dumps(msg)}\n\n"
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with RUNWAY_SSE_LOCK:
+                if q in RUNWAY_SSE_CLIENTS:
+                    RUNWAY_SSE_CLIENTS.remove(q)
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/runway/trigger", methods=["POST"])
+@login_required
+def runway_trigger():
+    """立即触发一次 Runway 提交（后台执行，非阻塞）。
+    自动选择模式：有 API key → API 模式，否则 → 浏览器模式。
+    """
+    global RUNWAY_RUNNING
+    with RUNWAY_LOCK:
+        if RUNWAY_RUNNING:
+            return jsonify({"status": "busy", "message": "已有提交任务正在运行，请稍后再试"}), 409
+        RUNWAY_RUNNING = True
+
+    # 默认使用浏览器模式（Unlimited Plan Explore Mode 免积分）
+    # API 模式需显式传参 ?mode=api 且设置 RUNWAYML_API_SECRET
+    req_mode = request.args.get("mode", "browser")
+    api_key = os.environ.get("RUNWAYML_API_SECRET", "")
+    use_api = (req_mode == "api" and bool(api_key))
+
+    def _run():
+        global RUNWAY_RUNNING
+        mode = "API" if use_api else "浏览器"
+        script = "runway_api.py" if use_api else "runway_browser.py"
+        try:
+            result = subprocess.run(
+                [sys.executable, script],
+                cwd=str(RUNWAY_SCRIPT_DIR),
+                capture_output=True, text=True,
+                timeout=600,
+                env={**os.environ, "RUNWAYML_API_SECRET": api_key},
+            )
+            print(f"[Runway Trigger {mode}] exit={result.returncode}")
+            if result.stdout:
+                for line in result.stdout.strip().split("\n")[-10:]:
+                    print(f"  {line}")
+            if result.stderr:
+                for line in result.stderr.strip().split("\n")[-5:]:
+                    print(f"  stderr: {line}")
+            _runway_notify_sse("update", {"mode": mode, "exit_code": result.returncode})
+        except subprocess.TimeoutExpired:
+            print(f"[Runway Trigger {mode}] 超时 (10min)")
+            _runway_notify_sse("error", {"message": "执行超时 (10min)"})
+        except Exception as e:
+            print(f"[Runway Trigger {mode}] 异常: {e}")
+            _runway_notify_sse("error", {"message": str(e)})
+        finally:
+            with RUNWAY_LOCK:
+                RUNWAY_RUNNING = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({
+        "status": "ok",
+        "message": f"已触发提交（{['浏览器', 'API'][use_api]}模式），后台运行中",
+        "mode": "api" if use_api else "browser",
+    })
 
 
 if __name__ == "__main__":

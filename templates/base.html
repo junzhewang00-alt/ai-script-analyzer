@@ -24,6 +24,13 @@
     <canvas id="ai-bg-canvas"></canvas>
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- 移动端菜单按钮 -->
+    <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="菜单">
+        ☰
+    </button>
+    <!-- 移动端遮罩 -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileMenu()"></div>
+
     <!-- rlhdr: 左侧边栏 -->
     <aside class="sidebar" id="sidebar">
         <!-- 折叠按钮 -->
@@ -56,6 +63,10 @@
             <a href="/dashboard" class="sidebar-link {{ 'active' if request.path == '/dashboard' else '' }}">
                 <span class="sidebar-link-icon">📊</span>
                 <span>积分面板</span>
+            </a>
+            <a href="/runway" class="sidebar-link {{ 'active' if request.path.startswith('/runway') else '' }}">
+                <span class="sidebar-link-icon">🎞️</span>
+                <span>Runway 批量</span>
             </a>
         </nav>
 
@@ -138,6 +149,10 @@
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
+    // ── Chat context (overridden by pages) ──
+    window.__chatContext = window.__chatContext || {};
+    </script>
+    <script>
     // Toast helper
     function showToast(msg, type) {
         type = type || "error";
@@ -175,6 +190,26 @@
         localStorage.setItem("sidebar-collapsed", sidebar.classList.contains("collapsed"));
     }
 
+    // ── Mobile menu ──
+    function toggleMobileMenu() {
+        var sidebar = document.getElementById("sidebar");
+        var overlay = document.getElementById("sidebar-overlay");
+        sidebar.classList.toggle("mobile-open");
+        overlay.classList.toggle("show");
+    }
+    function closeMobileMenu() {
+        var sidebar = document.getElementById("sidebar");
+        var overlay = document.getElementById("sidebar-overlay");
+        sidebar.classList.remove("mobile-open");
+        overlay.classList.remove("show");
+    }
+    // Close mobile menu on nav click
+    document.querySelectorAll(".sidebar-link").forEach(function(link) {
+        link.addEventListener("click", function() {
+            if (window.innerWidth <= 640) closeMobileMenu();
+        });
+    });
+
     // ── AI Chat ──
     var chatInput = document.getElementById("chat-input");
     var chatMessages = document.getElementById("chat-messages");
@@ -211,7 +246,7 @@
             method: "POST",
             credentials: "same-origin",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({message: text}),
+            body: JSON.stringify({message: text, context: window.__chatContext || {}}),
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {

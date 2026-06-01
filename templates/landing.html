@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 短剧剧本分析器 — 7 维度深度分析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&family=Viaoda+Libre&family=Imprima&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   GLOBAL
+   ============================================================ */
+:root {
+  --bg-deep: #060608;
+  --accent: #818cf8;
+  --accent-light: #a5b4fc;
+  --text: #f0f0f4;
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-muted: rgba(255,255,255,0.30);
+  --font-heading: "Instrument Serif", "Noto Serif SC", serif;
+  --font-body: "Inter", "Noto Sans SC", sans-serif;
+  --radius-full: 9999px;
+  --radius-lg: 18px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scrollbar-gutter: stable; }
+body {
+  font-family: var(--font-body);
+  background: #0a0608;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+nav {
+  position: fixed; top:0; left:0; right:0; z-index:50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 48px;
+  pointer-events: none;
+}
+nav a { pointer-events: auto; }
+.nav-brand {
+  font-weight: 700; font-size: 0.92rem; color: var(--text);
+  display: flex; align-items: center; gap: 8px; text-decoration: none;
+}
+.nav-brand-dot {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  display: flex; align-items: center; justify-content: center; font-size: 0.7rem;
+}
+.nav-actions { display: flex; gap: 10px; align-items: center; }
+.nav-actions a {
+  font-size: 0.85rem; text-decoration: none; padding: 8px 20px;
+  border-radius: var(--radius-full); transition: all 0.3s;
+  font-family: var(--font-body);
+}
+.nav-login { color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.15); }
+.nav-login:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+.nav-register { background: #fff; color: #0a0608; font-weight: 500; }
+.nav-register:hover { background: #e8e8f0; transform: translateY(-1px); }
+
+/* ============================================================
+   SCENE WRAPPER
+   ============================================================ */
+.scene-wrapper {
+  height: 300vh;
+  position: relative;
+}
+.scene {
+  position: sticky; top: 0;
+  width: 100%; height: 100vh;
+  overflow: hidden;
+  z-index: 1;
+}
+.scene .layer {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Layer 1: World */
+.layer-world {
+  z-index: 1;
+  object-fit: cover;
+  transform-origin: center center;
+}
+/* Layer 2: Portal */
+.layer-portal {
+  z-index: 2;
+  object-fit: contain;
+  transform-origin: 52% 38%;
+}
+/* Layer 3: Canvas particles */
+.layer-canvas { z-index: 3; }
+/* Layer 4: Curtains */
+.layer-curtain-l {
+  z-index: 4;
+  object-fit: cover;
+  object-position: left center;
+  transform: translateX(0);
+  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.layer-curtain-l.entrance-open { transform: translateX(-62%); }
+.layer-curtain-l.no-transition { transition: none; }
+.layer-curtain-r {
+  z-index: 4;
+  object-fit: cover;
+  object-position: right center;
+  transform: translateX(0);
+  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.layer-curtain-r.entrance-open { transform: translateX(62%); }
+.layer-curtain-r.no-transition { transition: none; }
+
+/* ============================================================
+   PAGE 1: HERO OVERLAY
+   ============================================================ */
+.hero-overlay {
+  position: absolute; z-index: 10;
+  inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  will-change: opacity;
+}
+.hero-overlay > * { pointer-events: auto; }
+.hero-content {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 0 60px;
+}
+/* Entrance */
+.hero-entrance {
+  opacity: 0; transform: translateY(32px); filter: blur(8px);
+  transition: opacity 0.9s cubic-bezier(0.22,1,0.36,1),
+              transform 0.9s cubic-bezier(0.22,1,0.36,1),
+              filter 0.9s cubic-bezier(0.22,1,0.36,1);
+  will-change: opacity, transform, filter;
+}
+.hero-entrance.show { opacity: 1; transform: translateY(0); filter: blur(0); }
+.hero-entrance-d1 { transition-delay: 0.15s; }
+.hero-entrance-d2 { transition-delay: 0.25s; }
+.hero-entrance-d3 { transition-delay: 0.35s; }
+.hero-entrance-d4 { transition-delay: 0.45s; }
+
+.hero-left { max-width: 440px; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 18px; border-radius: var(--radius-full);
+  font-size: 0.78rem; font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 24px;
+}
+.hero-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-light);
+  box-shadow: 0 0 8px rgba(129,140,248,0.6);
+}
+.hero-title {
+  font-family: var(--font-heading);
+  font-size: clamp(2.8rem, 6vw, 5.2rem);
+  font-weight: 400; font-style: italic;
+  line-height: 0.95; letter-spacing: -0.03em;
+  margin-bottom: 16px;
+  color: #fff;
+}
+.hero-title .hl {
+  font-style: normal;
+  color: var(--accent-light);
+}
+.hero-subtitle {
+  font-size: 1.05rem; color: rgba(255,255,255,0.55);
+  line-height: 1.7; font-weight: 300; margin-bottom: 32px;
+}
+.hero-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* Buttons */
+.btn-glass {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 14px 32px; border-radius: var(--radius-full);
+  font-size: 0.95rem; font-weight: 500; text-decoration: none;
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  box-shadow: 3px 3px 3px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.12);
+  transition: all 0.3s;
+  position: relative; overflow: hidden;
+}
+.btn-glass::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.4px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.10) 25%, transparent 50%, rgba(255,255,255,0.10) 75%, rgba(255,255,255,0.35) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+}
+.btn-glass:hover {
+  transform: translateY(-2px);
+  box-shadow: 3px 6px 30px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.2);
+}
+.btn-ghost {
+  padding: 14px 32px; border-radius: var(--radius-full);
+  font-size: 0.95rem; text-decoration: none;
+  color: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.13);
+  transition: all 0.3s;
+}
+.btn-ghost:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+
+/* Hero right cards */
+.hero-right { display: flex; gap: 14px; }
+.hero-card {
+  width: 150px; height: 150px; border-radius: 24px;
+  position: relative; overflow: hidden;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  will-change: transform;
+}
+.hero-card:hover { transform: translateY(-4px); }
+.hero-card-icon { font-size: 1.8rem; margin-bottom: 8px; }
+.hero-card-label { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+.hero-card-bottom {
+  position: absolute; bottom: 12px; left: 12px; right: 12px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.15) 60%, transparent 100%);
+  border-radius: 14px; padding: 8px 12px;
+  font-size: 0.7rem; color: rgba(255,255,255,0.8);
+  text-align: center;
+}
+
+/* ============================================================
+   SLIDER DOTS
+   ============================================================ */
+.slider-dots {
+  position: absolute; bottom: 80px; left: 60px; z-index: 12;
+  display: flex; gap: 8px; align-items: center;
+  will-change: opacity;
+}
+.slider-dot {
+  height: 3px; border-radius: 2px; background: #fff;
+  transition: width 0.4s, opacity 0.4s;
+}
+.slider-dot.active { width: 28px; opacity: 0.9; }
+.slider-dot:not(.active) { width: 14px; opacity: 0.3; }
+
+/* ============================================================
+   SCROLL CUE
+   ============================================================ */
+.scroll-cue {
+  position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+  z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  will-change: opacity;
+}
+.scroll-cue-text {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
+  color: rgba(255,255,255,0.6);
+}
+.scroll-cue-ring {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  animation: bobUp 1.8s ease-in-out infinite;
+}
+.scroll-cue-ring svg { width: 14px; height: 14px; }
+.scroll-cue-ring svg line { stroke: rgba(255,255,255,0.5); stroke-width: 2; }
+@keyframes bobUp {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ============================================================
+   PAGE 2: SCENE 2 OVERLAY
+   ============================================================ */
+.scene2-overlay {
+  position: absolute; z-index: 46; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 0; will-change: opacity;
+}
+.scene2-content {
+  text-align: center; max-width: 520px; padding: 0 24px;
+}
+.scene2-title {
+  font-family: var(--font-heading);
+  font-size: clamp(38px, 10vw, 72px);
+  font-weight: 400; font-style: italic;
+  color: #fff; letter-spacing: 0.03em; line-height: 1.05;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.4);
+  margin-bottom: 20px;
+}
+.scene2-subtitle {
+  font-size: 20px; color: rgba(255,255,255,0.82);
+  line-height: 1.6; font-weight: 300;
+}
+.scene2-cta {
+  display: inline-flex; margin-top: 32px; pointer-events: auto;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+  position: relative; z-index: 2;
+  background: #0a0608;
+  padding: 40px 0;
+  text-align: center; color: var(--text-muted); font-size: 0.78rem;
+}
+footer a { color: var(--text-muted); text-decoration: none; }
+footer a:hover { color: var(--text-secondary); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1099px) {
+  .hero-content { flex-direction: column; gap: 36px; text-align: center; padding: 0 24px; }
+  .hero-left { max-width: 100%; }
+  .hero-cta { justify-content: center; }
+  .hero-right { justify-content: center; }
+  .hero-card { width: 120px; height: 120px; border-radius: 22px; }
+}
+@media (max-width: 767px) {
+  nav { padding: 18px 20px; }
+  .slider-dots { bottom: 100px; left: 50%; transform: translateX(-50%); }
+  .scroll-cue { display: none; }
+  .hero-content { padding: 0 20px; }
+  .hero-title { font-size: 2.2rem; }
+  .hero-subtitle { font-size: 0.88rem; max-width: 280px; margin-left: auto; margin-right: auto; }
+  .hero-right { gap: 8px; }
+  .hero-card { width: 90px; height: 90px; border-radius: 16px; }
+  .hero-card-icon { font-size: 1.3rem; }
+  .hero-card-label { font-size: 0.62rem; }
+  .hero-card-bottom { display: none; }
+  .scene2-title { font-size: 2rem; }
+  .scene2-subtitle { font-size: 14px; max-width: 260px; margin: 0 auto; }
+  .btn-glass, .btn-ghost { padding: 12px 24px; font-size: 0.85rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- SCENE WRAPPER -->
+<div class="scene-wrapper">
+<div class="scene" id="scene">
+
+  <!-- Layer 1: World -->
+  <img class="layer layer-world" id="worldBg"
+       src="https://res.cloudinary.com/dsdhxhhqh/image/upload/v1779975077/world_bg_jzzcn1.jpg"
+       alt="" crossorigin="anonymous">
+
+  <!-- Layer 2: Portal -->
+  <img class="layer layer-portal" id="portalBg"
+       src="https://res.cloudinary.com/dsdhxhhqh/image/upload/v1779974947/portal_bg_mu60k9.png"
+       alt="" crossorigin="anonymous">
+
+  <!-- Layer 3: Canvas particles -->
+  <canvas class="layer layer-canvas" id="particleCanvas"></canvas>
+
+  <!-- Layer 4: Curtain Left -->
+  <img class="layer layer-curtain-l" id="curtainL"
+       src="https://res.cloudinary.com/dsdhxhhqh/image/upload/v1779975070/curtain_left_cdht6q.png"
+       alt="" crossorigin="anonymous">
+
+  <!-- Layer 4: Curtain Right -->
+  <img class="layer layer-curtain-r" id="curtainR"
+       src="https://res.cloudinary.com/dsdhxhhqh/image/upload/v1779975071/curtain_right_a9bn3i.png"
+       alt="" crossorigin="anonymous">
+
+  <!-- ═══════════ PAGE 1: HERO ═══════════ -->
+  <div class="hero-overlay" id="heroOverlay">
+    <div class="hero-content">
+      <div class="hero-left">
+        <div class="hero-entrance hero-entrance-d1">
+          <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            AI 驱动的专业剧本分析
+          </div>
+        </div>
+        <div class="hero-title hero-entrance hero-entrance-d2">
+          让你的短剧剧本<br>获得<span class="hl">7 维度</span>深度分析
+        </div>
+        <div class="hero-subtitle hero-entrance hero-entrance-d3">
+          上传剧本，几分钟内获得人物小传、结构拆解、对白诊断、AI 生成提示词
+        </div>
+        <div class="hero-cta hero-entrance hero-entrance-d4">
+          <a href="/auth/register" class="btn-glass">免费注册 · 送 200 积分</a>
+          <a href="/auth/login" class="btn-ghost">已有账号？登录</a>
+        </div>
+      </div>
+      <div class="hero-right hero-entrance hero-entrance-d4">
+        <div class="hero-card">
+          <div class="hero-card-icon">👤</div>
+          <div class="hero-card-label">角色分析</div>
+          <div class="hero-card-bottom">人物 · 弧光</div>
+        </div>
+        <div class="hero-card">
+          <div class="hero-card-icon">🏗️</div>
+          <div class="hero-card-label">结构拆解</div>
+          <div class="hero-card-bottom">叙事 · 节奏</div>
+        </div>
+        <div class="hero-card">
+          <div class="hero-card-icon">🎥</div>
+          <div class="hero-card-label">AI 提示词</div>
+          <div class="hero-card-bottom">Runway · Sora</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slider Dots -->
+  <div class="slider-dots" id="sliderDots">
+    <div class="slider-dot active"></div>
+    <div class="slider-dot"></div>
+    <div class="slider-dot"></div>
+    <div class="slider-dot"></div>
+  </div>
+
+  <!-- Scroll Cue -->
+  <div class="scroll-cue" id="scrollCue">
+    <span class="scroll-cue-text">向下滚动</span>
+    <div class="scroll-cue-ring">
+      <svg viewBox="0 0 24 24"><polyline points="8,12 12,16 16,12" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2"/></svg>
+    </div>
+  </div>
+
+  <!-- ═══════════ PAGE 2: CALL TO ACTION ═══════════ -->
+  <div class="scene2-overlay" id="scene2Overlay">
+    <div class="scene2-content">
+      <div class="scene2-title">准备好让你的剧本<br>更上一层楼？</div>
+      <div class="scene2-subtitle">从剧本到成片，AI 全链路解析。注册即享 200 积分，即刻体验 7 维度深度分析。</div>
+      <div class="scene2-cta">
+        <a href="/auth/register" class="btn-glass" style="font-size:1rem;padding:16px 36px;">免费注册 · 开始分析</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <a href="/" class="nav-brand">
+      <span class="nav-brand-dot">🎬</span>
+      AI 短剧分析器
+    </a>
+    <div class="nav-actions">
+      <a href="/auth/login" class="nav-login">登录</a>
+      <a href="/auth/register" class="nav-register">注册</a>
+    </div>
+  </nav>
+
+</div><!-- /scene -->
+</div><!-- /scene-wrapper -->
+
+<!-- Footer -->
+<footer>
+  <p>&copy; 2026 AI 短剧剧本分析器 &nbsp;·&nbsp;
+  <a href="/auth/login">登录</a> &nbsp;·&nbsp;
+  <a href="/auth/register">注册</a> &nbsp;·&nbsp;
+  Powered by DeepSeek</p>
+</footer>
+
+<!-- ==================== SCRIPTS ==================== -->
+<script>
+(function() {
+  'use strict';
+
+  // ── Math ──────────────────────────────────────────────────
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const easeInOut = t => t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+
+  // ── DOM refs (cached once) ────────────────────────────────
+  const worldEl   = document.getElementById('worldBg');
+  const portalEl  = document.getElementById('portalBg');
+  const curtainL  = document.getElementById('curtainL');
+  const curtainR  = document.getElementById('curtainR');
+  const heroOver  = document.getElementById('heroOverlay');
+  const scene2Over= document.getElementById('scene2Overlay');
+  const scrollCue = document.getElementById('scrollCue');
+  const canvas    = document.getElementById('particleCanvas');
+  const ctx       = canvas.getContext('2d');
+
+  // Pre-cache slider dots (static DOM, query once)
+  const sliderDotsEl = document.getElementById('sliderDots');
+  const sliderDots = sliderDotsEl ? [].slice.call(sliderDotsEl.querySelectorAll('.slider-dot')) : [];
+
+  // ── State ─────────────────────────────────────────────────
+  let W, H;
+  let scrollP = 0;
+  let mouseX = 0.5, mouseY = 0.5;
+  let targetMX = 0.5, targetMY = 0.5;
+  const LERP_SPEED = 0.08;
+
+  // ── Particles (optimized: pre-computed color strings) ─────
+  const N = 80;
+  let pts = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function spawn() {
+    pts = new Array(N);
+    for (let i = 0; i < N; i++) {
+      const h = 225 + Math.random() * 35;
+      const s = 60;
+      const l = 70 + Math.random() * 20;
+      pts[i] = {
+        x: Math.random() * W, y: Math.random() * H,
+        r: Math.random() * 2.2 + 0.4,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        a: Math.random() * 0.45 + 0.08,
+        // pre-compute HSLA string — avoid template literal in hot loop
+        color: 'hsla(' + (h|0) + ',' + s + '%,' + (l|0) + '%,',
+      };
+    }
+  }
+
+  function drawPts(sp, mx, my) {
+    ctx.clearRect(0, 0, W, H);
+    const cx = W * 0.52, cy = H * 0.38;
+    const ps = 1 + (7.5 - 1) * sp;  // lerp(1, 7.5, sp) unrolled
+    const ar = 200 * ps;
+
+    for (let i = 0; i < N; i++) {
+      const p = pts[i];
+      p.x += p.vx + (mx - 0.5) * 0.25;
+      p.y += p.vy + (my - 0.5) * 0.25;
+
+      if (sp > 0.08) {
+        const dx = cx - p.x, dy = cy - p.y;
+        const d = Math.sqrt(dx*dx + dy*dy) || 1;
+        const f = sp * 0.035 * (1 - d / ar);
+        if (f > 0) { const ff = f < 0.05 ? f : 0.05; p.vx += (dx/d) * ff; p.vy += (dy/d) * ff; }
+      }
+
+      p.vx *= 0.994; p.vy *= 0.994;
+
+      if (p.x < -20) p.x = W + 20;
+      if (p.x > W + 20) p.x = -20;
+      if (p.y < -20) p.y = H + 20;
+      if (p.y > H + 20) p.y = -20;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = p.color + p.a + ')';
+      ctx.fill();
+    }
+  }
+
+  // ── Render loop (all pixel values pre-computed, no calc()) ─
+  function tick() {
+    mouseX = mouseX + (targetMX - mouseX) * LERP_SPEED;
+    mouseY = mouseY + (targetMY - mouseY) * LERP_SPEED;
+    const rx = (mouseX - 0.5) * 2;
+    const ry = (mouseY - 0.5) * 2;
+
+    const st = window.pageYOffset;
+    const dh = document.documentElement.scrollHeight - H;
+    scrollP = dh > 0 ? (st / dh < 0 ? 0 : st / dh > 1 ? 1 : st / dh) : 0;
+    const ep = easeInOut(scrollP);
+
+    // Pre-compute all pixel offsets (avoids CSS calc() entirely)
+    const wx = (rx * 6) | 0,   wy = (ry * 6) | 0;
+    const px = (rx * 7) | 0,   py = (ry * 7) | 0;
+    const clx = (rx * 14) | 0,  cly = (ry * 4.2) | 0;
+
+    // World BG — translate3d only
+    const ws = 1 + 0.18 * scrollP;  // lerp(1, 1.18, sp) unrolled
+    worldEl.style.transform = 'translate3d(' + wx + 'px,' + wy + 'px,0) scale(' + ws.toFixed(3) + ')';
+
+    // Portal
+    const ps = 1 + 6.5 * scrollP;  // lerp(1, 7.5, sp) unrolled
+    const po = scrollP < 0.65 ? 1 : scrollP > 0.85 ? 0 : (1 - (scrollP - 0.65) / 0.2);
+    portalEl.style.transform = 'translate3d(' + px + 'px,' + py + 'px,0) scale(' + ps.toFixed(3) + ')';
+    portalEl.style.opacity = po < 0 ? 0 : po > 1 ? 1 : po.toFixed(4);
+
+    // Curtains (after entrance done)
+    if (curtainL.classList.contains('no-transition')) {
+      const csPct = 62 + ep * 150;
+      const csPx = ((csPct / 100) * W) | 0;
+      const csc = 1 + 0.3 * scrollP;  // lerp(1, 1.3, sp) unrolled
+
+      const ltx = (-csPx + clx) | 0;
+      const rtx = (csPx + clx) | 0;
+      curtainL.style.transform = 'translate3d(' + ltx + 'px,' + cly + 'px,0) scale(' + csc.toFixed(3) + ')';
+      curtainR.style.transform = 'translate3d(' + rtx + 'px,' + cly + 'px,0) scale(' + csc.toFixed(3) + ')';
+    }
+
+    // Page 1: Hero
+    const ho = scrollP > 0.35 ? 0 : (1 - scrollP / 0.35);
+    heroOver.style.opacity = ho < 0.005 ? 0 : ho > 1 ? 1 : ho.toFixed(4);
+    heroOver.style.pointerEvents = ho > 0.03 ? 'auto' : 'none';
+
+    // Page 2: CTA
+    const s2o = scrollP < 0.55 ? 0 : scrollP > 0.80 ? 1 : ((scrollP - 0.55) / 0.25);
+    scene2Over.style.opacity = s2o < 0.005 ? 0 : s2o > 1 ? 1 : s2o.toFixed(4);
+    scene2Over.style.pointerEvents = s2o > 0.3 ? 'auto' : 'none';
+
+    // Scroll cue
+    if (scrollCue) {
+      const sco = scrollP > 0.12 ? 0 : (1 - scrollP / 0.12);
+      scrollCue.style.opacity = sco < 0.005 ? 0 : sco > 1 ? 1 : sco.toFixed(4);
+    }
+
+    // Slider dots (cached array, no querySelectorAll per frame)
+    if (sliderDots.length) {
+      const ai = (scrollP * sliderDots.length) | 0;
+      const idx = ai >= sliderDots.length ? sliderDots.length - 1 : ai;
+      for (let i = 0; i < sliderDots.length; i++) {
+        sliderDots[i].className = i === idx ? 'slider-dot active' : 'slider-dot';
+      }
+    }
+
+    drawPts(scrollP, mouseX, mouseY);
+    requestAnimationFrame(tick);
+  }
+
+  // ── Events ───────────────────────────────────────────────
+  window.addEventListener('resize', () => { resize(); spawn(); });
+  document.addEventListener('mousemove', e => {
+    targetMX = e.clientX / W;
+    targetMY = e.clientY / H;
+  });
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length > 0) {
+      targetMX = e.touches[0].clientX / W;
+      targetMY = e.touches[0].clientY / H;
+    }
+  }, { passive: true });
+
+  // ── Entrance ─────────────────────────────────────────────
+  function entrance() {
+    setTimeout(() => {
+      curtainL.classList.add('entrance-open');
+      curtainR.classList.add('entrance-open');
+    }, 100);
+
+    setTimeout(() => {
+      var items = document.querySelectorAll('.hero-entrance');
+      for (var i = 0; i < items.length; i++) {
+        (function(el, d) { setTimeout(function() { el.classList.add('show'); }, d); })(items[i], i * 80);
+      }
+    }, 600);
+
+    setTimeout(() => {
+      curtainL.classList.add('no-transition');
+      curtainR.classList.add('no-transition');
+    }, 2000);
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  resize();
+  spawn();
+  entrance();
+  tick();
+})();
+</script>
+</body>
+</html>

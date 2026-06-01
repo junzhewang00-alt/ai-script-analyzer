@@ -1,4 +1,13 @@
-"""审核编排器 — 串联视频处理、ASR、AI 分析、汇总"""
+"""审核编排器 — 串联视频处理、ASR、AI 分析、汇总
+
+新版流程（专业审片人级别）：
+1. 技术质量检测（并行）
+2. 提取音频 → ASR → 台词比对
+3. 16帧关键帧 → Qwen Omni 逐帧情感分析
+4. DeepSeek 专业审片报告合成（综合 Qwen数据 + 剧本 + ASR）
+5. 三者汇总 → DeepSeek 最终评审
+6. 保存到数据库
+"""
 
 from __future__ import annotations
 
@@ -9,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from reviewer.video import VideoAnalyzer
 from reviewer.asr import ASRProcessor
 from reviewer.qwen import QwenAnalyzer
+from reviewer.synthesizer import EmotionSynthesizer
 from reviewer.claude_bridge import ClaudeBridge
 
 
@@ -19,6 +29,7 @@ class ReviewOrchestrator:
         self.video = VideoAnalyzer()
         self.asr = ASRProcessor()
         self.qwen = QwenAnalyzer()
+        self.synthesizer = EmotionSynthesizer()
         self.claude = ClaudeBridge()
 
     def run_review(self, job_id: int, video_path: str, script_text: str,
@@ -30,9 +41,10 @@ class ReviewOrchestrator:
         流程:
         1. 技术质量检测（可立即启动，不需要 AI）
         2. 提取音频 → ASR → 台词比对（串行依赖）
-        3. 关键帧 → Qwen 情感分析
-        4. 三者汇总 → Claude Code 最终评审
-        5. 保存到数据库
+        3. 关键帧 → Qwen 16帧逐帧情感分析
+        4. 合成器 → DeepSeek 专业审片报告
+        5. 三者汇总 → DeepSeek 最终评审
+        6. 保存到数据库
 
         Returns:
             {success: bool, results: {emotion, dialogue, tech}, summary: {...}}
@@ -71,21 +83,38 @@ class ReviewOrchestrator:
         )
         results["dialogue"] = dialogue_result
 
-        # ── 阶段 3: Qwen 情感分析 ──
+        # ── 阶段 3: Qwen 16帧逐帧情感分析 ──
         if _cancelled():
             return {"success": True, "results": results, "summary": None}
 
-        emotion_result = self.qwen.analyze_emotion(video_path)
+        qwen_emotion = self.qwen.analyze_emotion(video_path)
+
+        # ── 阶段 4: DeepSeek 专业审片报告合成 ──
+        if _cancelled():
+            return {"success": True, "results": results, "summary": None}
+
+        if not qwen_emotion.get("_fallback"):
+            # Qwen 分析成功 → 合成专业审片报告
+            emotion_result = self.synthesizer.synthesize(
+                qwen_result=qwen_emotion,
+                script_text=script_text,
+                asr_text=asr_result.get("text", ""),
+            )
+            # 附带原始 Qwen 数据供前端展示逐帧分析
+            emotion_result["_qwen_raw"] = qwen_emotion
+        else:
+            # Qwen 不可用 → 直接使用 fallback
+            emotion_result = qwen_emotion
         results["emotion"] = emotion_result
 
-        # ── 阶段 4: 汇总评审 ──
+        # ── 阶段 5: 汇总评审 ──
         if _cancelled():
             return {"success": True, "results": results, "summary": None}
 
         summary = self.claude.generate_summary(results)
         results["_summary"] = summary
 
-        # ── 阶段 5: 持久化 ──
+        # ── 阶段 6: 持久化 ──
         if flask_app:
             try:
                 from models import ReviewJob, ReviewResult, ReviewSummary

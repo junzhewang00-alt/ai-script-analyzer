@@ -131,6 +131,86 @@
         background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);
         border-radius: 10px; padding: 14px; color: #ef4444; margin: 16px 0; display: none;
     }
+
+    /* ── 审片报告专属样式 ── */
+    .review-card { max-height: 600px; overflow-y: auto; }
+    .review-section { margin-bottom: 16px; }
+    .review-section-title {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px; background: rgba(30, 41, 59, 0.5);
+        border-radius: 8px; cursor: pointer; user-select: none;
+        font-size: 0.85rem; font-weight: 600; color: #cbd5e1;
+        transition: background 0.2s;
+    }
+    .review-section-title:hover { background: rgba(30, 41, 59, 0.8); }
+    .review-section-body { padding: 10px 12px 0; display: none; }
+    .review-section.open .review-section-body { display: block; }
+
+    .score-bar { height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
+    .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .score-bar-fill.high { background: #22c55e; }
+    .score-bar-fill.mid { background: #facc15; }
+    .score-bar-fill.low { background: #ef4444; }
+
+    .stage-item { padding: 6px 0; border-bottom: 1px solid rgba(51,65,85,0.3); font-size: 0.82rem; }
+    .stage-item:last-child { border-bottom: none; }
+    .stage-time { color: #818cf8; font-weight: 600; margin-right: 8px; }
+    .stage-emotion { display: inline-block; padding: 1px 8px; border-radius: 12px; background: rgba(129,140,248,0.15); color: #a5b4fc; font-size: 0.78rem; margin-right: 6px; }
+
+    .char-card { padding: 10px; margin: 8px 0; background: rgba(15,15,25,0.5); border-radius: 8px; border-left: 3px solid #818cf8; }
+    .char-card .char-name { font-weight: 700; color: #e2e8f0; margin-bottom: 4px; }
+    .char-card .char-journey { font-size: 0.82rem; color: #94a3b8; }
+
+    .highlight-item { padding: 6px 0; border-bottom: 1px solid rgba(34,197,94,0.15); font-size: 0.82rem; color: #86efac; }
+    .highlight-item::before { content: '⭐ '; }
+    .issue-review-item { padding: 6px 0; border-bottom: 1px solid rgba(239,68,68,0.15); font-size: 0.82rem; }
+    .severity-high { color: #ef4444; font-weight: 600; }
+    .severity-medium { color: #facc15; }
+    .severity-low { color: #94a3b8; }
+    .issue-suggestion { font-size: 0.78rem; color: #818cf8; margin-top: 2px; }
+
+    .verdict-block { padding: 12px; background: rgba(129,140,248,0.08); border-radius: 8px; font-size: 0.88rem; color: #e2e8f0; line-height: 1.7; margin-bottom: 12px; }
+
+    .rec-item { display: inline-block; padding: 4px 10px; margin: 2px 4px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 16px; font-size: 0.78rem; color: #fca5a5; }
+
+    .qwen-frames-toggle { margin-top: 10px; text-align: center; }
+    .qwen-frames-toggle button { padding: 4px 12px; background: transparent; border: 1px solid #334155; border-radius: 6px; color: #64748b; font-size: 0.75rem; cursor: pointer; }
+    .qwen-frames-toggle button:hover { border-color: #818cf8; color: #818cf8; }
+    .qwen-frame-mini { padding: 4px 8px; border-bottom: 1px solid rgba(51,65,85,0.2); font-size: 0.75rem; color: #94a3b8; display: flex; gap: 8px; align-items: baseline; }
+    .qwen-frame-mini .qf-ts { color: #818cf8; font-weight: 600; min-width: 42px; }
+    .qwen-frame-mini .qf-emo { color: #e2e8f0; }
+    .qwen-frame-mini .qf-int { color: #64748b; font-size: 0.7rem; }
+    .qwen-frames { max-height: 300px; overflow-y: auto; margin-top: 8px; display: none; }
+    .qwen-frames.open { display: block; }
+
+    /* ── 审核历史 ── */
+    .history-section { margin-top: 24px; }
+    .history-toggle {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 16px; background: rgba(15,15,25,0.6);
+        border: 1px solid #1e293b; border-radius: 10px;
+        cursor: pointer; color: #94a3b8; font-size: 0.85rem;
+        transition: border-color .2s;
+    }
+    .history-toggle:hover { border-color: #334155; }
+    .history-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .history-item {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; background: rgba(15,15,25,0.5);
+        border: 1px solid #1e293b; border-radius: 8px;
+        cursor: pointer; transition: all .2s; font-size: 0.82rem;
+    }
+    .history-item:hover { border-color: rgba(129,140,248,.3); background: rgba(15,15,25,0.8); }
+    .history-item .hi-status {
+        padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600;
+    }
+    .hi-status-completed { background: rgba(34,197,94,.12); color: #22c55e; }
+    .hi-status-failed { background: rgba(239,68,68,.12); color: #ef4444; }
+    .hi-status-running { background: rgba(59,130,246,.12); color: #60a5fa; }
+    .hi-status-pending { background: rgba(148,163,184,.12); color: #94a3b8; }
+    .history-item .hi-name { flex:1; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-item .hi-score { color: #818cf8; font-weight: 700; }
+    .history-item .hi-date { color: #64748b; font-size: 0.75rem; }
 </style>
 {% endblock %}
 
@@ -174,6 +254,15 @@
     </div>
     <div class="error-block" id="error-msg"></div>
 
+    <!-- 审核历史 -->
+    <div class="history-section" id="history-section">
+        <div class="history-toggle" onclick="toggleHistory()">
+            <span>📋 审核历史</span>
+            <span id="history-arrow" style="transition:transform .2s">▾</span>
+        </div>
+        <div class="history-list" id="history-list" style="display:none"></div>
+    </div>
+
     <!-- 进度 -->
     <div class="progress-section" id="progress-section">
         <div class="progress-bar-outer">
@@ -193,6 +282,8 @@
 {% block scripts %}
 <script>
 let currentJobId = null;
+// 设置 AI 助手上下文
+window.__chatContext = {page_type: "review"};
 let pollTimer = null;
 let _polling = false;
 let _stopped = false;
@@ -208,6 +299,7 @@ function _clearPollTimer() {
         const data = await resp.json();
         if (data.found && data.results) {
             currentJobId = data.job_id;
+            window.__chatContext = {page_type: "review", job_id: currentJobId};
             _stopped = true;
             document.getElementById('results-section').style.display = 'block';
             document.getElementById('progress-section').style.display = 'none';
@@ -227,6 +319,7 @@ function clearResults() {
     currentJobId = null;
     _stopped = false;
     _clearPollTimer();
+    window.__chatContext = {page_type: "review"};
 }
 
 // ── 拖拽上传 ──
@@ -296,6 +389,7 @@ async function startReview() {
         }
 
         currentJobId = data.job_id;
+        window.__chatContext = {page_type: "review", job_id: currentJobId};
         document.getElementById('progress-section').style.display = 'block';
         document.getElementById('results-section').style.display = 'none';
         document.getElementById('cancel-btn').style.display = 'inline-block';
@@ -494,32 +588,216 @@ function buildDialogueCard(dialogue) {
 }
 
 function buildEmotionCard(emotion) {
+    // 判断是否为新版专业审片报告（有 emotional_arc 等字段）
+    const isReport = emotion && emotion.emotional_arc && emotion.performance_quality;
     const hasData = emotion && emotion.issues !== undefined && !emotion._fallback;
-    let html = `<div class="result-card">
-        <div class="card-header">
-            <span class="card-icon">🎭</span><span class="card-title">情感一致性</span>`;
+    const isError = emotion && !!emotion._error;
+    const isFallback = emotion && emotion._fallback;
 
-    if (!hasData) {
-        const note = emotion?._fallback ? '已跳过' : '等待中';
-        html += `<span class="card-badge badge-warn">${note === '已跳过' ? '⏭️' : '⏳'}</span></div>
-            <div class="no-issues">${emotion?.summary || '等待分析结果…'}</div>`;
-    } else if (emotion.issues.length === 0) {
-        html += `<span class="card-badge badge-ok">一致</span></div>
-            <div class="no-issues">✅ 情感表达与预期一致</div>`;
-    } else {
-        html += `<span class="card-badge badge-warn">${emotion.issues.length}处问题</span></div>`;
+    // ── 错误 / 降级 / 等待 状态 ──
+    if (!hasData || isError || isFallback) {
+        let html = `<div class="result-card">
+            <div class="card-header">
+                <span class="card-icon">🎭</span><span class="card-title">情感分析</span>`;
+        if (isError) {
+            html += `<span class="card-badge badge-fail">错误</span></div>
+                <div class="issue-item" style="color:#ef4444">${escapeHtml(emotion.summary || 'API 错误')}</div>`;
+        } else if (isFallback) {
+            html += `<span class="card-badge badge-warn">⏭️</span></div>
+                <div class="no-issues">${escapeHtml(emotion.summary || '已跳过')}</div>`;
+        } else {
+            html += `<span class="card-badge badge-warn">⏳</span></div>
+                <div class="no-issues">等待分析结果…</div>`;
+        }
+        html += '</div>';
+        return toElement(html);
+    }
+
+    // ── 旧版兼容（非报告格式且有旧 issues） ──
+    if (!isReport && emotion.issues && emotion.issues.length > 0) {
+        let html = `<div class="result-card">
+            <div class="card-header">
+                <span class="card-icon">🎭</span><span class="card-title">情感分析</span>
+                <span class="card-badge badge-warn">${emotion.issues.length}处问题</span></div>`;
         emotion.issues.slice(0, 10).forEach(issue => {
             html += `<div class="issue-item">
-                ⏱ ${issue.timestamp || '?'}s | 预期: ${escapeHtml(issue.expected || '?')} → 实际: ${escapeHtml(issue.actual || '?')}
-                (置信度: ${((issue.confidence || 0) * 100).toFixed(0)}%)
+                ⏱ ${issue.timestamp || '?'}s | ${escapeHtml(issue.expected || '?')} → ${escapeHtml(issue.actual || '?')}
+                (${((issue.confidence || 0) * 100).toFixed(0)}%)
             </div>`;
         });
         if (emotion.summary) {
             html += `<div class="issue-item" style="color:#94a3b8;margin-top:8px">📋 ${escapeHtml(emotion.summary)}</div>`;
         }
+        html += '</div>';
+        return toElement(html);
     }
+
+    // ── 新版专业审片报告 ──
+    const overall = emotion.overall_score || 50;
+    const scoreCls = overall >= 75 ? 'badge-ok' : overall >= 60 ? 'badge-warn' : 'badge-fail';
+    const scoreLabel = overall >= 90 ? '优秀' : overall >= 75 ? '合格' : overall >= 60 ? '待改进' : '需重拍';
+
+    let html = `<div class="result-card review-card">
+        <div class="card-header">
+            <span class="card-icon">🎭</span><span class="card-title">情感分析 · 审片报告</span>
+            <span class="card-badge ${scoreCls}">${overall}分 ${scoreLabel}</span>
+        </div>`;
+
+    // ── 总评 ──
+    if (emotion.verdict) {
+        html += `<div class="verdict-block">📋 ${escapeHtml(emotion.verdict)}</div>`;
+    }
+
+    // ── 表演质量评分条 ──
+    if (emotion.performance_quality) {
+        const pq = emotion.performance_quality;
+        html += buildScoreSection('🎬 表演质量', pq.overall_score, [
+            {label: '面部表情', score: pq.facial_score},
+            {label: '肢体语言', score: pq.body_language_score},
+        ]);
+        if (pq.strengths && pq.strengths.length) {
+            html += `<div style="padding:0 12px;margin-bottom:8px">`;
+            pq.strengths.forEach(s => { html += `<span style="color:#86efac;font-size:0.78rem;margin-right:8px">👍 ${escapeHtml(s)}</span>`; });
+            html += `</div>`;
+        }
+        if (pq.weaknesses && pq.weaknesses.length) {
+            html += `<div style="padding:0 12px;margin-bottom:8px">`;
+            pq.weaknesses.forEach(w => { html += `<span style="color:#fca5a5;font-size:0.78rem;margin-right:8px">⚠ ${escapeHtml(w)}</span>`; });
+            html += `</div>`;
+        }
+    }
+
+    // ── 情绪节奏 ──
+    if (emotion.emotional_pacing) {
+        const ep = emotion.emotional_pacing;
+        html += `<div class="review-section">
+            <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+                ⏱ 情绪节奏 · ${ep.score || '?'}分 · ${escapeHtml(ep.rhythm || '?')} ▾
+            </div><div class="review-section-body">`;
+        html += buildScoreBar(ep.score);
+        if (ep.transition_quality) html += `<div class="issue-item">转换质量: ${escapeHtml(ep.transition_quality)}</div>`;
+        if (ep.critique) html += `<div class="issue-item" style="color:#94a3b8">${escapeHtml(ep.critique)}</div>`;
+        html += `</div></div>`;
+    }
+
+    // ── 情绪弧线 ──
+    if (emotion.emotional_arc) {
+        const ea = emotion.emotional_arc;
+        html += `<div class="review-section">
+            <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+                📈 情绪弧线 · ${escapeHtml(ea.curve_description || ea.trajectory || '')} ▾
+            </div><div class="review-section-body">`;
+        if (ea.trajectory) html += `<div class="issue-item" style="color:#cbd5e1;margin-bottom:8px">${escapeHtml(ea.trajectory)}</div>`;
+        (ea.stages || []).forEach(s => {
+            html += `<div class="stage-item">
+                <span class="stage-time">${escapeHtml(s.timestamp_range || '?')}</span>
+                <span class="stage-emotion">${escapeHtml(s.emotion || '?')}</span>
+                强度 ${s.intensity || '?'} · ${escapeHtml(s.note || '')}
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // ── 角色分析 ──
+    if (emotion.character_analysis && emotion.character_analysis.length) {
+        html += `<div class="review-section">
+            <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+                👤 角色分析 (${emotion.character_analysis.length}) ▾
+            </div><div class="review-section-body">`;
+        emotion.character_analysis.forEach(c => {
+            const cs = c.consistency_score || 50;
+            const csCls = cs >= 75 ? 'high' : cs >= 60 ? 'mid' : 'low';
+            html += `<div class="char-card">
+                <div class="char-name">${escapeHtml(c.character || '未知角色')} · 一致性 ${cs}分 ${c.believable ? '✓' : '⚠'}</div>
+                <div class="score-bar"><div class="score-bar-fill ${csCls}" style="width:${cs}%"></div></div>
+                <div class="char-journey">${escapeHtml(c.emotional_journey || '')}</div>
+                ${c.performance_notes ? `<div style="font-size:0.8rem;color:#64748b;margin-top:4px">${escapeHtml(c.performance_notes)}</div>` : ''}
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // ── 亮点 ──
+    if (emotion.highlights && emotion.highlights.length) {
+        html += `<div class="review-section">
+            <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+                ⭐ 表演亮点 (${emotion.highlights.length}) ▾
+            </div><div class="review-section-body">`;
+        emotion.highlights.forEach(h => {
+            html += `<div class="highlight-item">⏱ ${h.timestamp_sec || '?'}s ${escapeHtml(h.description || '')}</div>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // ── 问题 ──
+    if (emotion.issues && emotion.issues.length) {
+        html += `<div class="review-section open">
+            <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+                ⚠️ 需要关注 (${emotion.issues.length}) ▾
+            </div><div class="review-section-body">`;
+        emotion.issues.forEach(iss => {
+            const sevCls = 'severity-' + (iss.severity || 'low');
+            html += `<div class="issue-review-item">
+                ⏱ ${iss.timestamp_sec || '?'}s <span class="${sevCls}">[${(iss.severity || 'low').toUpperCase()}]</span> ${escapeHtml(iss.description || '')}
+                ${iss.suggestion ? `<div class="issue-suggestion">💡 ${escapeHtml(iss.suggestion)}</div>` : ''}
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // ── 重拍建议 ──
+    if (emotion.reshoot_recommendations && emotion.reshoot_recommendations.length) {
+        html += `<div style="margin-top:12px;padding:0 4px">`;
+        html += `<div style="font-size:0.8rem;color:#64748b;margin-bottom:6px">🎬 重拍建议</div>`;
+        emotion.reshoot_recommendations.forEach(r => {
+            html += `<span class="rec-item">${escapeHtml(r)}</span>`;
+        });
+        html += `</div>`;
+    }
+
+    // ── 逐帧数据（可展开） ──
+    const qwenRaw = emotion._qwen_raw;
+    if (qwenRaw && qwenRaw.frames && qwenRaw.frames.length) {
+        const fid = 'qf-' + Math.random().toString(36).slice(2,8);
+        html += `<div class="qwen-frames-toggle">
+            <button onclick="var e=document.getElementById('${fid}');e.classList.toggle('open');this.textContent=e.classList.contains('open')?'收起逐帧数据 ▴':'展开 ${qwenRaw.frames.length} 帧逐帧数据 ▾'">
+            展开 ${qwenRaw.frames.length} 帧逐帧数据 ▾
+            </button>
+            <div class="qwen-frames" id="${fid}">`;
+        qwenRaw.frames.forEach(f => {
+            html += `<div class="qwen-frame-mini">
+                <span class="qf-ts">${f.timestamp_sec || '?'}s</span>
+                <span class="qf-emo">${escapeHtml(f.primary_emotion || '?')}</span>
+                <span class="qf-int">强度${f.intensity || '?'}</span>
+                <span style="color:#475569;font-size:0.7rem;margin-left:auto">${escapeHtml((f.facial_expression || '').slice(0,40))}</span>
+            </div>`;
+        });
+        html += `</div></div>`;
+    }
+
     html += '</div>';
     return toElement(html);
+}
+
+function buildScoreSection(title, score, subs) {
+    let cls = score >= 75 ? 'high' : score >= 60 ? 'mid' : 'low';
+    let html = `<div class="review-section">
+        <div class="review-section-title" onclick="this.parentElement.classList.toggle('open')">
+            ${title} · ${score || '?'}分 ▾
+        </div><div class="review-section-body">`;
+    html += buildScoreBar(score);
+    subs.forEach(s => {
+        let sc = s.score >= 75 ? 'high' : s.score >= 60 ? 'mid' : 'low';
+        html += `<div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">${s.label}: ${s.score}分
+            <div class="score-bar"><div class="score-bar-fill ${sc}" style="width:${s.score}%"></div></div></div>`;
+    });
+    html += `</div></div>`;
+    return html;
+}
+
+function buildScoreBar(score) {
+    let cls = score >= 75 ? 'high' : score >= 60 ? 'mid' : 'low';
+    return `<div class="score-bar"><div class="score-bar-fill ${cls}" style="width:${score}%"></div></div>`;
 }
 
 // ── 工具函数 ──
@@ -551,6 +829,40 @@ function updateCreditsDisplay() {
             }
         })
         .catch(() => {});
+}
+
+// ── 审核历史 ──
+var _historyLoaded = false;
+function toggleHistory() {
+    var list = document.getElementById('history-list');
+    var arrow = document.getElementById('history-arrow');
+    var open = list.style.display !== 'none';
+    list.style.display = open ? 'none' : '';
+    arrow.style.transform = open ? '' : 'rotate(180deg)';
+    if (!open && !_historyLoaded) { loadHistory(); _historyLoaded = true; }
+}
+function loadHistory() {
+    fetch('/api/review/history')
+        .then(r => r.json())
+        .then(data => {
+            var list = document.getElementById('history-list');
+            if (!data.jobs || data.jobs.length === 0) {
+                list.innerHTML = '<div style="color:#64748b;font-size:.82rem;padding:8px 0">暂无审核记录</div>';
+                return;
+            }
+            list.innerHTML = data.jobs.map(function(j) {
+                var statusLabels = {pending:'待审核',running:'审核中',completed:'已完成',failed:'失败'};
+                var scoreHtml = j.score != null ? '<span class="hi-score">' + j.score + '分</span>' : '';
+                var passed = j.passed ? ' ✅' : (j.status === 'completed' ? ' ❌' : '');
+                return '<div class="history-item" onclick="location.href=\\'/review\\'" title="点击刷新页面查看详情">' +
+                    '<span class="hi-status hi-status-' + j.status + '">' + (statusLabels[j.status] || j.status) + '</span>' +
+                    '<span class="hi-name">' + escapeHtml(j.video_filename || '未命名视频') + passed + '</span>' +
+                    scoreHtml +
+                    '<span class="hi-date">' + (j.created_at ? j.created_at.slice(0,16).replace('T',' ') : '') + '</span>' +
+                '</div>';
+            }).join('');
+        })
+        .catch(function() {});
 }
 </script>
 {% endblock %}
