@@ -854,7 +854,7 @@ function loadHistory() {
                 var statusLabels = {pending:'待审核',running:'审核中',completed:'已完成',failed:'失败'};
                 var scoreHtml = j.score != null ? '<span class="hi-score">' + j.score + '分</span>' : '';
                 var passed = j.passed ? ' ✅' : (j.status === 'completed' ? ' ❌' : '');
-                return '<div class="history-item" onclick="location.href=\\'/review\\'" title="点击刷新页面查看详情">' +
+                return '<div class="history-item" onclick="location.href=\x27/review\x27" title="点击刷新页面查看详情">' +
                     '<span class="hi-status hi-status-' + j.status + '">' + (statusLabels[j.status] || j.status) + '</span>' +
                     '<span class="hi-name">' + escapeHtml(j.video_filename || '未命名视频') + passed + '</span>' +
                     scoreHtml +

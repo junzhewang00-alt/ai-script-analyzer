@@ -22,7 +22,14 @@ from analyzer.prompts import build_analysis_tasks, SYSTEM_ROLE
 BASE_DIR = Path(__file__).resolve().parent
 
 # 导入 Runway 共享配置
-sys.path.insert(0, str(Path("C:/Users/ZhuanZ/Desktop/runway-bot")))
+_runway_paths = [
+    Path("C:/Users/ZhuanZ/Desktop/runway-bot"),  # Windows dev
+    BASE_DIR,  # 项目内（Linux 服务器）
+]
+for _rp in _runway_paths:
+    if (_rp / "runway_config.py").exists():
+        sys.path.insert(0, str(_rp))
+        break
 from runway_config import (
     get_paths, default_jobs, default_job_template, save_config,
     DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
