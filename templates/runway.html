@@ -79,6 +79,15 @@
     .btn-trigger:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(34,197,94,0.3); }
     .btn-trigger:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
     .model-warn { font-size: 0.65rem; color: #f59e0b; margin-top: 2px; }
+
+    /* batch toolbar */
+    .batch-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; flex-wrap: wrap; }
+    .batch-toolbar .batch-label { font-size: 0.72rem; color: #777; white-space: nowrap; }
+    .batch-toolbar select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 6px; color: #e0e0e0; font-size: 0.72rem; cursor: pointer; }
+    .batch-toolbar select option { background: #1a1a2e; color: #e0e0e0; }
+    .batch-toolbar select:focus { outline: none; border-color: rgba(96,165,250,0.4); }
+    .batch-apply-btn { padding: 5px 14px; background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.25); border-radius: 6px; color: #60a5fa; font-size: 0.75rem; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+    .batch-apply-btn:hover { background: rgba(96,165,250,0.2); border-color: rgba(96,165,250,0.4); }
 </style>
 {% endblock %}
 
@@ -102,6 +111,28 @@
             <span>实时状态 · SSE 推送 · <span id="mode-indicator">检测中...</span> · <span id="rate-limit-info">每 10 分钟 2 个任务</span></span>
         </div>
         <div class="info-stats" id="summary-inline"></div>
+    </div>
+
+    <div class="batch-toolbar" id="batch-toolbar" style="display:none">
+        <span class="batch-label">批量设置:</span>
+        <select id="batch-model" onchange="onBatchModelChange()">
+            <option value="seedance2">Seedance 2.0</option>
+            <option value="seedance">Seedance</option>
+            <option disabled>-- Runway --</option>
+            <option value="gen4.5" selected>Gen-4.5</option>
+            <option value="gen4">Gen-4</option>
+            <option value="gen4-turbo">Gen-4 Turbo</option>
+            <option value="gen3-alpha">Gen-3 Alpha</option>
+            <option value="gen3-turbo">Gen-3 Turbo</option>
+            <option disabled>-- 第三方 --</option>
+            <option value="kling3">Kling 3.0 Pro</option>
+            <option value="kling">Kling</option>
+            <option value="veo3">Veo 3.1</option>
+            <option value="veo">Veo</option>
+        </select>
+        <select id="batch-duration"></select>
+        <select id="batch-resolution"></select>
+        <button class="batch-apply-btn" onclick="applyBatch()">应用到全部</button>
     </div>
 
     <div class="runway-grid" id="job-grid"></div>
@@ -135,6 +166,7 @@ window.addEventListener('beforeunload', function(e) {
 });
 
 (async function init() {
+    initBatchToolbar();
     await loadStatus();
     await checkMode();
     connectSSE();
@@ -249,9 +281,45 @@ function onModelChange(sel) {
     markDirty();
 }
 
+// ============ batch toolbar ============
+function initBatchToolbar() {
+    const caps = MODEL_CAPS["gen4.5"];
+    const durSel = document.getElementById('batch-duration');
+    durSel.innerHTML = caps.durations.map(d => `<option value="${d}" ${d===caps.defaultDuration?'selected':''}>${d}s</option>`).join('');
+    const resSel = document.getElementById('batch-resolution');
+    resSel.innerHTML = caps.resolutions.map(r => `<option value="${r}" ${r===caps.defaultResolution?'selected':''}>${r}</option>`).join('');
+}
+
+function onBatchModelChange() {
+    const model = document.getElementById('batch-model').value;
+    const caps = MODEL_CAPS[model] || MODEL_CAPS["gen4.5"];
+    const durSel = document.getElementById('batch-duration');
+    durSel.innerHTML = caps.durations.map(d => `<option value="${d}" ${d===caps.defaultDuration?'selected':''}>${d}s</option>`).join('');
+    const resSel = document.getElementById('batch-resolution');
+    resSel.innerHTML = caps.resolutions.map(r => `<option value="${r}" ${r===caps.defaultResolution?'selected':''}>${r}</option>`).join('');
+}
+
+function applyBatch() {
+    const model = document.getElementById('batch-model').value;
+    const duration = document.getElementById('batch-duration').value;
+    const resolution = document.getElementById('batch-resolution').value;
+    const cards = document.querySelectorAll('.job-card');
+    cards.forEach(card => {
+        const ms = card.querySelector('select[data-field=model]');
+        const ds = card.querySelector('select[data-field=duration]');
+        const rs = card.querySelector('select[data-field=resolution]');
+        if (ms) { ms.value = model; onModelChange(ms); }
+        if (ds) ds.value = duration;
+        if (rs) rs.value = resolution;
+    });
+    markDirty();
+    showToast('已批量应用: ' + MODEL_CAPS[model].label + ' ' + duration + 's ' + resolution, 'success');
+}
+
 // ============ render ============
 function renderJobs(jobs, force) {
     const grid = document.getElementById('job-grid');
+    const toolbar = document.getElementById('batch-toolbar');
     if (!jobs || jobs.length === 0) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#555;">'+
             '<div style="font-size:3rem;margin-bottom:16px;opacity:0.3;">🎞</div>'+
@@ -259,8 +327,10 @@ function renderJobs(jobs, force) {
             '<div style="font-size:0.78rem;color:#666;margin-bottom:18px;">在下方填写提示词后点击「保存到队列」，或点击下方按钮初始化 10 个空槽位</div>'+
             '<button onclick="savePrompts()" style="padding:8px 20px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:7px;color:#60a5fa;font-size:0.82rem;cursor:pointer;">初始化任务槽位</button>'+
             '</div>';
+        if(toolbar) toolbar.style.display = 'none';
         updateSummary(jobs); return;
     }
+    if(toolbar) toolbar.style.display = '';
     jobs.forEach(j => { if (j.image_paths && j.image_paths.length && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_paths; });
 
     const existingCards = grid.querySelectorAll('.job-card');
