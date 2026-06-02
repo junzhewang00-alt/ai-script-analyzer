@@ -159,7 +159,7 @@ let pollTimer = null, _polling = false, uploadedImages = {}, sseSource = null, c
 // uploadedImages[<jobId>] = ['/path/to/img1', '/path/to/img2', ...]
 let _submissionTimestamps = [];  // 提交记录时间戳
 let _rateLimitTimer = null;
-let _submitting = false;  // 防止提交期间定时器干预按钮状态
+let _submitting = false;
 
 window.addEventListener('beforeunload', function(e) {
     if (_dirty) { e.preventDefault(); e.returnValue = '你有未保存的修改，确定离开吗？'; return e.returnValue; }
@@ -171,7 +171,6 @@ window.addEventListener('beforeunload', function(e) {
     await checkMode();
     connectSSE();
     updateRateLimitUI();
-    _rateLimitTimer = setInterval(updateRateLimitUI, 1000);
 })();
 
 function checkRateLimit() {
@@ -192,7 +191,7 @@ function updateRateLimitUI() {
     const btn = document.getElementById('btn-trigger');
     const infoEl = document.getElementById('rate-limit-info');
     if (!btn || !infoEl) return;
-    if (_submitting) return;  // 提交进行中，不干预按钮状态
+    if (_rateLimitTimer) { clearTimeout(_rateLimitTimer); _rateLimitTimer = null; }
     const rl = checkRateLimit();
     if (rl.blocked) {
         btn.disabled = true;
@@ -201,6 +200,7 @@ function updateRateLimitUI() {
         btn.textContent = m > 0 ? `${m}m${s}s 后可提交` : `${s}s 后可提交`;
         infoEl.textContent = `下次可提交: ${m > 0 ? m+'分'+s+'秒' : s+'秒'}`;
         infoEl.style.color = '#f59e0b';
+        _rateLimitTimer = setTimeout(updateRateLimitUI, (rl.remaining + 1) * 1000);
     } else {
         btn.disabled = false;
         btn.textContent = '立即提交';
@@ -236,8 +236,9 @@ function connectSSE() {
     sseSource = new EventSource('/api/runway/stream');
     sseSource.onmessage = function(e) {
         try {
+            // SSE 已连接，停掉轮询
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             const msg = JSON.parse(e.data);
-            console.log('SSE:',msg.event,msg.data?.jobs?'jobs='+msg.data.jobs.length:'');
             if (msg.event === 'update' || msg.event === 'init') {
                 if (msg.data && msg.data.jobs) renderJobs(msg.data.jobs, true);
                 else loadStatus();

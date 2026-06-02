@@ -1255,11 +1255,19 @@ def serve_runway_image(filename):
     return send_from_directory(str(RUNWAY_UPLOAD_DIR), filename)
 
 
+_status_cache = {"data": None, "ts": 0}
+_STATUS_CACHE_TTL = 2  # 秒
+
+
 @app.route("/api/runway/status")
 @login_required
 def api_runway_status():
-    """读取 Runway 任务状态（供前端轮询）"""
+    """读取 Runway 任务状态（供前端轮询），带 2s 内存缓存减少磁盘 I/O"""
     try:
+        now = time.time()
+        if _status_cache["data"] is not None and (now - _status_cache["ts"]) < _STATUS_CACHE_TTL:
+            return jsonify(_status_cache["data"])
+
         if not RUNWAY_JOBS_PATH.exists():
             return jsonify({"jobs": [], "empty": True})
         with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
@@ -1280,7 +1288,10 @@ def api_runway_status():
                 "created_at": j.get("created_at"),
                 "completed_at": j.get("completed_at"),
             })
-        return jsonify({"jobs": safe_jobs})
+        result = {"jobs": safe_jobs}
+        _status_cache["data"] = result
+        _status_cache["ts"] = now
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1358,6 +1369,7 @@ def api_runway_save():
                 return jsonify({"status": "ok", "saved": len(new_jobs), "unchanged": True})
 
         save_config(RUNWAY_JOBS_PATH, data)
+        _status_cache["data"] = None  # 使缓存失效
 
         _runway_notify_sse("update", {"jobs": new_jobs})
         return jsonify({"status": "ok", "saved": len(new_jobs)})
@@ -1378,6 +1390,7 @@ def runway_clear():
     try:
         data = {"jobs": default_jobs()}
         save_config(RUNWAY_JOBS_PATH, data)
+        _status_cache["data"] = None
         _runway_notify_sse("update", {"jobs": data["jobs"]})
         return jsonify({"status": "ok"})
     except PermissionError:
