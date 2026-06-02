@@ -331,19 +331,7 @@ function renderJobs(jobs) {
                 }
             }
             if (needsRebuild) {
-                // 重建网格 HTML
-                let html = '';
-                for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
-                    const p = s < merged.length ? merged[s] : '';
-                    const pv = p ? (p.startsWith('/uploads/') ? p : '/uploads/runway/' + p.replace(/\\/g, '/').split('/').pop()) : '';
-                    html += `<div class="image-upload-slot${p?' has-image':''}" id="img-slot-${jobId}-${s}"
-                        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${jobId},${s})">
-                        <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${jobId},${s})"/>
-                        ${pv ? `<img class="slot-preview" src="${escapeHtml(pv)}" alt="img${s+1}"/>` : `<span class="slot-placeholder">+</span>`}
-                        <button class="slot-remove" onclick="event.stopPropagation();removeImage(${jobId},${s})">x</button>
-                    </div>`;
-                }
-                grid.innerHTML = html;
+                grid.innerHTML = buildImageSlotsHTML(jobId, merged);
             }
         }
 
@@ -359,34 +347,29 @@ function renderJobs(jobs) {
     updateSummary(jobs);
 }
 
+// 生成单个 job 的图片槽位 HTML（buildCardsHTML + renderJobs diff 共用）
+function buildImageSlotsHTML(jobId, imgs) {
+    let html = '';
+    for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
+        const p = s < imgs.length ? imgs[s] : '';
+        const pv = p ? (p.startsWith('/uploads/') ? p : '/uploads/runway/' + p.replace(/\\/g, '/').split('/').pop()) : '';
+        html += `<div class="image-upload-slot${p?' has-image':''}" id="img-slot-${jobId}-${s}"
+            ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${jobId},${s})">
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${jobId},${s})"/>
+            ${pv ? `<img class="slot-preview" src="${escapeHtml(pv)}" alt="img${s+1}"/>` : `<span class="slot-placeholder" title="点击或拖拽上传参考图">+</span>`}
+            <button class="slot-remove" onclick="event.stopPropagation();removeImage(${jobId},${s})">x</button>
+        </div>`;
+    }
+    return html;
+}
+
 function buildCardsHTML(jobs) {
     const queueMap = computeQueuePositions(jobs);
     return jobs.map(j => {
         const caps = MODEL_CAPS[j.model] || MODEL_CAPS["seedance2"];
         const labels = {pending:'待提交',submitted:'已提交',processing:'生成中',completed:'已完成',failed:'失败',error:'错误'};
         const queuePos = queueMap[j.id];
-        // 合并后端数据和前端上传的图片
         const imgs = uploadedImages[j.id] || j.image_paths || [];
-        // 归一化预览 URL
-        function previewUrl(p) {
-            if (!p) return '';
-            if (p.startsWith('/uploads/')) return p;
-            const fname = p.replace(/\\/g, '/').split('/').pop();
-            return '/uploads/runway/' + fname;
-        }
-
-        // 生成 4 个图片上传槽位
-        let imgSlots = '';
-        for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
-            const imgPath = s < imgs.length ? imgs[s] : '';
-            const pv = previewUrl(imgPath);
-            imgSlots += `<div class="image-upload-slot${imgPath?' has-image':''}" id="img-slot-${j.id}-${s}"
-                ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${j.id},${s})">
-                <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${j.id},${s})"/>
-                ${pv ? `<img class="slot-preview" src="${escapeHtml(pv)}" alt="img${s+1}"/>` : `<span class="slot-placeholder">+</span>`}
-                <button class="slot-remove" onclick="event.stopPropagation();removeImage(${j.id},${s})">x</button>
-            </div>`;
-        }
 
         return `<div class="job-card ${j.status}" data-job-id="${j.id}">
             <div class="job-card-header">
@@ -421,7 +404,7 @@ function buildCardsHTML(jobs) {
                 </select>
             </div>
             ${caps.note ? `<div class="model-warn">${caps.note}</div>` : ''}
-            <div class="image-upload-grid">${imgSlots}</div>
+            <div class="image-upload-grid">${buildImageSlotsHTML(j.id, imgs)}</div>
             ${j.status==='completed'&&j.result_url?`<div class="result-url"><a href="${escapeHtml(j.result_url)}" target="_blank">查看视频</a></div>`:''}
             ${(j.status==='failed'||j.status==='error')&&j.error?`<div class="result-url" style="color:#f87171">${escapeHtml(j.error)}</div>`:''}
         </div>`;
@@ -486,7 +469,7 @@ async function savePrompts() {
     const cards=document.querySelectorAll('.job-card');
     const prompts=[];
     if(!cards.length) {
-        for(let i=1;i<={{ RUNWAY_SLOTS }};i++) prompts.push({id:i,prompt:'',image_paths:uploadedImages[i]||[],model:'gen4.5',duration:5,resolution:'720p'});
+        for(let i=1;i<={{ RUNWAY_SLOTS }};i++) prompts.push({id:i,prompt:'',image_paths:(uploadedImages[i]||[]).filter(Boolean),model:'gen4.5',duration:5,resolution:'720p'});
     } else {
         cards.forEach(card=>{
             try {
@@ -496,7 +479,8 @@ async function savePrompts() {
                 const ms=card.querySelector('select[data-field=model]');
                 const ds=card.querySelector('select[data-field=duration]');
                 const rs=card.querySelector('select[data-field=resolution]');
-                prompts.push({id:jid,prompt:ta?ta.value:'',image_paths:uploadedImages[jid]||[],model:ms?ms.value:'gen4.5',duration:ds?parseInt(ds.value):5,resolution:rs?rs.value:'720p'});
+                const paths=(uploadedImages[jid]||[]).filter(Boolean);
+                prompts.push({id:jid,prompt:ta?ta.value:'',image_paths:paths,model:ms?ms.value:'gen4.5',duration:ds?parseInt(ds.value):5,resolution:rs?rs.value:'720p'});
             } catch(e){ console.error('savePrompts card read error:',e); }
         });
     }

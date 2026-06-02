@@ -1319,7 +1319,7 @@ def api_runway_save():
                         "created_at": None, "completed_at": None,
                     }
                 job["prompt"] = submitted.get("prompt", "")
-                job["image_paths"] = submitted.get("image_paths", [])
+                job["image_paths"] = submitted.get("image_paths", [])[:MAX_IMAGES_PER_JOB]
                 job["model"] = submitted.get("model", DEFAULT_MODEL)
                 job["duration"] = submitted.get("duration", DEFAULT_DURATION)
                 job["resolution"] = submitted.get("resolution", DEFAULT_RESOLUTION)
