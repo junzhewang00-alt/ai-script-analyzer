@@ -1379,7 +1379,7 @@ def api_runway_save():
     except PermissionError as e:
         import traceback
         print(f"[SAVE ERROR] {traceback.format_exc()}")
-        return jsonify({"error": f"权限不足，无法写入任务文件。请运行: sudo chown -R $(whoami) {RUNWAY_JOBS_PATH.parent} && sudo chmod 755 {RUNWAY_JOBS_PATH.parent}"}), 500
+        return jsonify({"error": f"服务器文件权限错误，无法写入任务文件。请联系管理员检查 {RUNWAY_JOBS_PATH.parent} 目录权限，确保 Flask 进程用户有写入权限。"}), 500
     except Exception as e:
         import traceback
         print(f"[SAVE ERROR] {traceback.format_exc()}")
