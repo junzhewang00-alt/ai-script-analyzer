@@ -130,6 +130,10 @@ let _submissionTimestamps = [];  // 提交记录时间戳
 let _rateLimitTimer = null;
 let _submitting = false;  // 防止提交期间定时器干预按钮状态
 
+window.addEventListener('beforeunload', function(e) {
+    if (_dirty) { e.preventDefault(); e.returnValue = '你有未保存的修改，确定离开吗？'; return e.returnValue; }
+});
+
 (async function init() {
     await loadStatus();
     await checkMode();
@@ -203,7 +207,7 @@ function connectSSE() {
             const msg = JSON.parse(e.data);
             console.log('SSE:',msg.event,msg.data?.jobs?'jobs='+msg.data.jobs.length:'');
             if (msg.event === 'update' || msg.event === 'init') {
-                if (msg.data && msg.data.jobs) renderJobs(msg.data.jobs);
+                if (msg.data && msg.data.jobs) renderJobs(msg.data.jobs, true);
                 else loadStatus();
             } else if (msg.event === 'error') {
                 showToast(msg.data && msg.data.message || '后台任务异常', 'error');
@@ -246,7 +250,7 @@ function onModelChange(sel) {
 }
 
 // ============ render ============
-function renderJobs(jobs) {
+function renderJobs(jobs, force) {
     const grid = document.getElementById('job-grid');
     if (!jobs || jobs.length === 0) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#555;">'+
@@ -260,7 +264,7 @@ function renderJobs(jobs) {
     jobs.forEach(j => { if (j.image_paths && j.image_paths.length && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_paths; });
 
     const existingCards = grid.querySelectorAll('.job-card');
-    if (existingCards.length !== jobs.length) {
+    if (force || existingCards.length !== jobs.length) {
         grid.innerHTML = buildCardsHTML(jobs);
         updateSummary(jobs); return;
     }
@@ -439,8 +443,8 @@ async function uploadImage(file, jobId, slotIdx) {
         if (data.status==='ok') {
             while (uploadedImages[jobId].length <= slotIdx) uploadedImages[jobId].push('');
             uploadedImages[jobId][slotIdx] = data.path;
-            markDirty(); loadStatus();
-            showToast('Job #'+jobId+' 图片 '+(slotIdx+1)+' 已上传', 'success');
+            markDirty();
+            await savePrompts(true);  // 静默保存，防止刷新丢失
         } else showToast(data.error||'上传失败', 'error');
     } catch(e) { showToast('网络错误', 'error'); }
     if (slot) slot.classList.remove('uploading');
@@ -463,9 +467,10 @@ async function loadStatus() {
 
 // ============ save ============
 let _dirty=false, _saving=false; function markDirty(){_dirty=true;}
-async function savePrompts() {
+async function savePrompts(silent) {
     if(_saving) return false; _saving=true;
-    const btn=document.getElementById('btn-save'); btn.disabled=true; btn.textContent='保存中...';
+    const btn=document.getElementById('btn-save');
+    if(!silent){ btn.disabled=true; btn.textContent='保存中...'; }
     const cards=document.querySelectorAll('.job-card');
     const prompts=[];
     if(!cards.length) {
@@ -487,10 +492,16 @@ async function savePrompts() {
     try {
         const resp=await fetch('/api/runway/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts})});
         const data=await resp.json();
-        if(data.status==='ok'){showToast('已保存 '+data.saved+' 个任务到队列','success');_dirty=false;await loadStatus();btn.disabled=false;btn.textContent='保存到队列';_saving=false;return true;}
-        else showToast(data.error||'保存失败','error');
-    } catch(e){console.error('savePrompts error:',e);showToast('网络错误，请检查服务器是否运行','error');}
-    btn.disabled=false; btn.textContent='保存到队列'; _saving=false; return false;
+        if(data.status==='ok'){
+            if(!silent) showToast('已保存 '+data.saved+' 个任务到队列','success');
+            _dirty=false; await loadStatus();
+            if(!silent){ btn.disabled=false; btn.textContent='保存到队列'; }
+            _saving=false; return true;
+        }
+        if(!silent) showToast(data.error||'保存失败','error');
+    } catch(e){console.error('savePrompts error:',e);if(!silent)showToast('网络错误，请检查服务器是否运行','error');}
+    if(!silent){ btn.disabled=false; btn.textContent='保存到队列'; }
+    _saving=false; return false;
 }
 
 async function clearAll(){
