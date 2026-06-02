@@ -299,7 +299,9 @@ function onBatchModelChange() {
     resSel.innerHTML = caps.resolutions.map(r => `<option value="${r}" ${r===caps.defaultResolution?'selected':''}>${r}</option>`).join('');
 }
 
-function applyBatch() {
+async function applyBatch() {
+    const btn = document.querySelector('.batch-apply-btn');
+    btn.disabled = true; btn.textContent = '应用中...';
     const model = document.getElementById('batch-model').value;
     const duration = document.getElementById('batch-duration').value;
     const resolution = document.getElementById('batch-resolution').value;
@@ -313,7 +315,8 @@ function applyBatch() {
         if (rs) rs.value = resolution;
     });
     markDirty();
-    showToast('已批量应用: ' + MODEL_CAPS[model].label + ' ' + duration + 's ' + resolution, 'success');
+    await savePrompts();
+    btn.disabled = false; btn.textContent = '应用到全部';
 }
 
 // ============ render ============
