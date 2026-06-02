@@ -47,23 +47,23 @@
     .params-row select:focus { outline: none; border-color: rgba(96,165,250,0.4); }
     .params-row select:disabled { opacity: 0.35; }
 
-    /* image upload */
-    .image-upload-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-    .image-upload-area { flex: 1; position: relative; border: 1px dashed rgba(255,255,255,0.12); border-radius: 7px; padding: 8px 10px; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: border-color 0.2s; min-height: 32px; }
-    .image-upload-area:hover { border-color: rgba(96,165,250,0.35); background: rgba(96,165,250,0.04); }
-    .image-upload-area.has-image { border-style: solid; border-color: rgba(34,197,94,0.25); background: rgba(34,197,94,0.03); }
-    .image-upload-area.uploading { border-color: rgba(96,165,250,0.5); background: rgba(96,165,250,0.06); pointer-events: none; animation: upload-pulse 1.2s infinite; }
+    /* image upload grid */
+    .image-upload-grid { display: flex; gap: 6px; margin-bottom: 4px; }
+    .image-upload-slot { width: 72px; height: 52px; position: relative; border: 1px dashed rgba(255,255,255,0.12); border-radius: 6px; cursor: pointer; transition: border-color 0.2s; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+    .image-upload-slot:hover { border-color: rgba(96,165,250,0.35); background: rgba(96,165,250,0.04); }
+    .image-upload-slot.has-image { border-style: solid; border-color: rgba(34,197,94,0.2); }
+    .image-upload-slot.uploading { border-color: rgba(96,165,250,0.5); background: rgba(96,165,250,0.06); pointer-events: none; animation: upload-pulse 1.2s infinite; }
     @keyframes upload-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-    .image-upload-area .upload-spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; margin-right: 4px; }
-    .image-upload-area.uploading .upload-spinner { display: inline-block; }
+    .image-upload-slot .upload-spinner { display: none; width: 12px; height: 12px; border: 2px solid rgba(96,165,250,0.3); border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; }
+    .image-upload-slot.uploading .upload-spinner { display: inline-block; }
+    .image-upload-slot.uploading .slot-placeholder { display: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .image-upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-    .image-upload-icon { font-size: 1rem; opacity: 0.5; }
-    .image-upload-text { font-size: 0.72rem; color: #777; }
-    .image-upload-filename { font-size: 0.7rem; color: #999; font-family: monospace; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .image-preview-thumb { width: 48px; height: 32px; border-radius: 5px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); }
-    .image-remove-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 1rem; padding: 1px 5px; border-radius: 3px; }
-    .image-remove-btn:hover { background: rgba(239,68,68,0.12); }
+    .image-upload-slot input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .slot-placeholder { font-size: 0.7rem; color: #666; }
+    .slot-preview { width: 100%; height: 100%; object-fit: cover; }
+    .slot-remove { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; background: rgba(0,0,0,0.7); border: none; border-radius: 3px; color: #f87171; font-size: 10px; cursor: pointer; display: none; align-items: center; justify-content: center; line-height: 1; }
+    .image-upload-slot.has-image .slot-remove { display: flex; }
+    .image-upload-slot:hover .slot-remove { display: flex; }
 
     .result-url { margin-top: 8px; font-size: 0.75rem; word-break: break-all; }
     .result-url a { color: #60a5fa; text-decoration: none; }
@@ -125,6 +125,7 @@ const MODEL_CAPS = {
 
 // ============ state ============
 let pollTimer = null, _polling = false, uploadedImages = {}, sseSource = null, currentMode = 'browser';
+// uploadedImages[<jobId>] = ['/path/to/img1', '/path/to/img2', ...]
 let _submissionTimestamps = [];  // 提交记录时间戳
 let _rateLimitTimer = null;
 let _submitting = false;  // 防止提交期间定时器干预按钮状态
@@ -256,7 +257,7 @@ function renderJobs(jobs) {
             '</div>';
         updateSummary(jobs); return;
     }
-    jobs.forEach(j => { if (j.image_path && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_path; });
+    jobs.forEach(j => { if (j.image_paths && j.image_paths.length && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_paths; });
 
     const existingCards = grid.querySelectorAll('.job-card');
     if (existingCards.length !== jobs.length) {
@@ -307,22 +308,43 @@ function renderJobs(jobs) {
             }
         }
 
-        const uploadArea = card.querySelector('.image-upload-area');
-        if (uploadArea && uploadedImages[jobId]) {
-            const path = uploadedImages[jobId];
-            const fname = path.replace(/\\/g, '/').split('/').pop();
-            const ps = path.startsWith('/uploads/') ? path : '/uploads/runway/' + fname;
-            uploadArea.classList.add('has-image');
-            const icon = uploadArea.querySelector('.image-upload-icon');
-            const text = uploadArea.querySelector('.image-upload-text');
-            const fnEl = uploadArea.querySelector('.image-upload-filename');
-            if (icon) icon.textContent = '';
-            if (text) text.textContent = '';
-            if (fnEl) fnEl.textContent = fname;
-            let thumb = uploadArea.querySelector('.image-preview-thumb');
-            if (!thumb) { thumb = document.createElement('img'); thumb.className='image-preview-thumb'; thumb.alt='preview'; uploadArea.insertBefore(thumb, uploadArea.firstChild); }
-            if (thumb.src !== ps) thumb.src = ps;
-            thumb.style.display = '';
+        // 更新图片网格：如果 uploadedImages 或服务端 image_paths 变了，重建整个网格
+        const grid = card.querySelector('.image-upload-grid');
+        if (grid) {
+            const currentImgs = uploadedImages[jobId] || [];
+            const serverImgs = job.image_paths || [];
+            const merged = currentImgs.length ? currentImgs : serverImgs;
+            // 简单检测：对比槽位数是否变化（网格重建成本低）
+            let needsRebuild = false;
+            const slots = grid.querySelectorAll('.image-upload-slot');
+            for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
+                const slot = slots[s];
+                const expectedSrc = s < merged.length ? merged[s] : '';
+                if (!slot) { needsRebuild = true; break; }
+                const img = slot.querySelector('.slot-preview');
+                const hasImg = slot.classList.contains('has-image');
+                const expectedHasImg = !!expectedSrc;
+                if (hasImg !== expectedHasImg) { needsRebuild = true; break; }
+                if (expectedSrc && img) {
+                    const expectedUrl = expectedSrc.startsWith('/uploads/') ? expectedSrc : '/uploads/runway/' + expectedSrc.replace(/\\/g, '/').split('/').pop();
+                    if (img.src && !img.src.endsWith(expectedUrl.split('/').pop())) { needsRebuild = true; break; }
+                }
+            }
+            if (needsRebuild) {
+                // 重建网格 HTML
+                let html = '';
+                for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
+                    const p = s < merged.length ? merged[s] : '';
+                    const pv = p ? (p.startsWith('/uploads/') ? p : '/uploads/runway/' + p.replace(/\\/g, '/').split('/').pop()) : '';
+                    html += `<div class="image-upload-slot${p?' has-image':''}" id="img-slot-${jobId}-${s}"
+                        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${jobId},${s})">
+                        <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${jobId},${s})"/>
+                        ${pv ? `<img class="slot-preview" src="${escapeHtml(pv)}" alt="img${s+1}"/>` : `<span class="slot-placeholder">+</span>`}
+                        <button class="slot-remove" onclick="event.stopPropagation();removeImage(${jobId},${s})">x</button>
+                    </div>`;
+                }
+                grid.innerHTML = html;
+            }
         }
 
         let resultEl = card.querySelector('.result-url');
@@ -342,11 +364,29 @@ function buildCardsHTML(jobs) {
     return jobs.map(j => {
         const caps = MODEL_CAPS[j.model] || MODEL_CAPS["seedance2"];
         const labels = {pending:'待提交',submitted:'已提交',processing:'生成中',completed:'已完成',failed:'失败',error:'错误'};
-        const hasImg = uploadedImages[j.id];
         const queuePos = queueMap[j.id];
-        const imgBase = hasImg ? hasImg.replace(/\\/g, '/') : '';
-        const ps = hasImg ? (hasImg.startsWith('/uploads/') ? hasImg : '/uploads/runway/' + imgBase.split('/').pop()) : '';
-        const fn = imgBase ? imgBase.split('/').pop() : '';
+        // 合并后端数据和前端上传的图片
+        const imgs = uploadedImages[j.id] || j.image_paths || [];
+        // 归一化预览 URL
+        function previewUrl(p) {
+            if (!p) return '';
+            if (p.startsWith('/uploads/')) return p;
+            const fname = p.replace(/\\/g, '/').split('/').pop();
+            return '/uploads/runway/' + fname;
+        }
+
+        // 生成 4 个图片上传槽位
+        let imgSlots = '';
+        for (let s = 0; s < {{ MAX_IMAGES_PER_JOB }}; s++) {
+            const imgPath = s < imgs.length ? imgs[s] : '';
+            const pv = previewUrl(imgPath);
+            imgSlots += `<div class="image-upload-slot${imgPath?' has-image':''}" id="img-slot-${j.id}-${s}"
+                ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${j.id},${s})">
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${j.id},${s})"/>
+                ${pv ? `<img class="slot-preview" src="${escapeHtml(pv)}" alt="img${s+1}"/>` : `<span class="slot-placeholder">+</span>`}
+                <button class="slot-remove" onclick="event.stopPropagation();removeImage(${j.id},${s})">x</button>
+            </div>`;
+        }
 
         return `<div class="job-card ${j.status}" data-job-id="${j.id}">
             <div class="job-card-header">
@@ -381,16 +421,7 @@ function buildCardsHTML(jobs) {
                 </select>
             </div>
             ${caps.note ? `<div class="model-warn">${caps.note}</div>` : ''}
-            <div class="image-upload-row">
-                <div class="image-upload-area${hasImg?' has-image':''}" id="dropzone-${j.id}" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${j.id})">
-                    <input type="file" id="file-input-${j.id}" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff,.tif,.heic,.heif" onchange="onFilePicked(this,${j.id})"/>
-                    ${ps?`<img class="image-preview-thumb" src="${escapeHtml(ps)}" alt="preview"/>`:''}
-                    <span class="image-upload-icon">${hasImg?'':''}</span>
-                    <span class="image-upload-text">${hasImg?'':''}</span>
-                    ${fn?`<span class="image-upload-filename">${escapeHtml(fn)}</span>`:`<span class="image-upload-text">上传参考图</span>`}
-                </div>
-                ${hasImg?`<button class="image-remove-btn" onclick="removeImage(${j.id})">x</button>`:''}
-            </div>
+            <div class="image-upload-grid">${imgSlots}</div>
             ${j.status==='completed'&&j.result_url?`<div class="result-url"><a href="${escapeHtml(j.result_url)}" target="_blank">查看视频</a></div>`:''}
             ${(j.status==='failed'||j.status==='error')&&j.error?`<div class="result-url" style="color:#f87171">${escapeHtml(j.error)}</div>`:''}
         </div>`;
@@ -414,27 +445,31 @@ function updateSummary(jobs) {
 }
 
 // ============ upload ============
-async function uploadImage(file, jobId) {
-    const dz = document.getElementById('dropzone-'+jobId);
-    const txt = dz.querySelector('.image-upload-text');
-    const origText = txt ? txt.textContent : '';
-    dz.classList.add('uploading');
-    if (txt) txt.textContent = '上传中...';
+async function uploadImage(file, jobId, slotIdx) {
+    if (!uploadedImages[jobId]) uploadedImages[jobId] = [];
+    const slot = document.getElementById('img-slot-'+jobId+'-'+slotIdx);
+    if (slot) slot.classList.add('uploading');
     const fd = new FormData(); fd.append('image',file); fd.append('job_id',String(jobId));
     try {
         const resp = await fetch('/api/runway/upload-image', {method:'POST',body:fd});
         const data = await resp.json();
-        if (data.status==='ok') { uploadedImages[jobId]=data.path; markDirty(); await loadStatus(); showToast('Job #'+jobId+' 图片已上传', 'success'); }
-        else showToast(data.error||'上传失败', 'error');
+        if (data.status==='ok') {
+            while (uploadedImages[jobId].length <= slotIdx) uploadedImages[jobId].push('');
+            uploadedImages[jobId][slotIdx] = data.path;
+            markDirty(); loadStatus();
+            showToast('Job #'+jobId+' 图片 '+(slotIdx+1)+' 已上传', 'success');
+        } else showToast(data.error||'上传失败', 'error');
     } catch(e) { showToast('网络错误', 'error'); }
-    dz.classList.remove('uploading');
-    if (txt) txt.textContent = origText;
+    if (slot) slot.classList.remove('uploading');
 }
-function onFilePicked(input,jobId) { const f=input.files[0]; if(f) uploadImage(f,jobId); }
+function onFilePicked(input, jobId, slotIdx) { const f=input.files[0]; if(f) uploadImage(f, jobId, slotIdx); }
 function onDragOver(e) { e.preventDefault(); e.currentTarget.style.borderColor='rgba(96,165,250,0.5)'; }
 function onDragLeave(e) { e.preventDefault(); e.currentTarget.style.borderColor=''; }
-function onDrop(e,jobId) { e.preventDefault(); e.currentTarget.style.borderColor=''; if(e.dataTransfer.files.length) uploadImage(e.dataTransfer.files[0],jobId); }
-function removeImage(jobId) { delete uploadedImages[jobId]; markDirty(); loadStatus(); showToast('Job #'+jobId+' 图片已移除', 'success'); }
+function onDrop(e, jobId, slotIdx) { e.preventDefault(); e.currentTarget.style.borderColor=''; if(e.dataTransfer.files.length) uploadImage(e.dataTransfer.files[0], jobId, slotIdx); }
+function removeImage(jobId, slotIdx) {
+    if (uploadedImages[jobId]) uploadedImages[jobId][slotIdx] = '';
+    markDirty(); loadStatus(); showToast('Job #'+jobId+' 图片 '+(slotIdx+1)+' 已移除', 'success');
+}
 
 // ============ poll ============
 async function loadStatus() {
@@ -451,7 +486,7 @@ async function savePrompts() {
     const cards=document.querySelectorAll('.job-card');
     const prompts=[];
     if(!cards.length) {
-        for(let i=1;i<={{ RUNWAY_SLOTS }};i++) prompts.push({id:i,prompt:'',image_path:uploadedImages[i]||'',model:'gen4.5',duration:5,resolution:'720p'});
+        for(let i=1;i<={{ RUNWAY_SLOTS }};i++) prompts.push({id:i,prompt:'',image_paths:uploadedImages[i]||[],model:'gen4.5',duration:5,resolution:'720p'});
     } else {
         cards.forEach(card=>{
             try {
@@ -461,7 +496,7 @@ async function savePrompts() {
                 const ms=card.querySelector('select[data-field=model]');
                 const ds=card.querySelector('select[data-field=duration]');
                 const rs=card.querySelector('select[data-field=resolution]');
-                prompts.push({id:jid,prompt:ta?ta.value:'',image_path:uploadedImages[jid]||'',model:ms?ms.value:'gen4.5',duration:ds?parseInt(ds.value):5,resolution:rs?rs.value:'720p'});
+                prompts.push({id:jid,prompt:ta?ta.value:'',image_paths:uploadedImages[jid]||[],model:ms?ms.value:'gen4.5',duration:ds?parseInt(ds.value):5,resolution:rs?rs.value:'720p'});
             } catch(e){ console.error('savePrompts card read error:',e); }
         });
     }

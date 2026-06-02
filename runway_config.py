@@ -39,6 +39,7 @@ MODEL_LABELS = {
 }
 
 RUNWAY_SLOTS = 10
+MAX_IMAGES_PER_JOB = 4
 
 DEFAULT_MODEL = "gen4.5"
 DEFAULT_DURATION = 5
@@ -64,7 +65,7 @@ def get_paths():
 def default_job_template(job_id):
     """返回一个新 job 的默认字典"""
     return {
-        "id": job_id, "prompt": "", "image_path": "",
+        "id": job_id, "prompt": "", "image_paths": [],
         "model": DEFAULT_MODEL, "duration": DEFAULT_DURATION,
         "resolution": DEFAULT_RESOLUTION,
         "task_id": None, "status": "pending",
@@ -89,6 +90,11 @@ def load_config(path):
         for key in template:
             if key not in job:
                 job[key] = template[key]
+        # 向后兼容：旧的 image_path 字符串 → 新 image_paths 数组
+        if "image_path" in job and not job.get("image_paths"):
+            old = job.pop("image_path")
+            job["image_paths"] = [old] if old else []
+        job.setdefault("image_paths", [])
     existing_ids = {j["id"] for j in cfg.get("jobs", [])}
     for d in default_jobs():
         if d["id"] not in existing_ids:

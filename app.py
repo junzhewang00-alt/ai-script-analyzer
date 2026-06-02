@@ -32,7 +32,7 @@ for _rp in _runway_paths:
         break
 from runway_config import (
     get_paths, default_jobs, default_job_template, save_config,
-    RUNWAY_SLOTS, DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
+    RUNWAY_SLOTS, MAX_IMAGES_PER_JOB, DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
 )
 
 load_dotenv(BASE_DIR / ".env")
@@ -1203,7 +1203,7 @@ RUNWAY_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".t
 @app.route("/runway")
 @login_required
 def runway_page():
-    return render_template("runway.html", RUNWAY_SLOTS=RUNWAY_SLOTS)
+    return render_template("runway.html", RUNWAY_SLOTS=RUNWAY_SLOTS, MAX_IMAGES_PER_JOB=MAX_IMAGES_PER_JOB)
 
 
 @app.route("/api/runway/upload-image", methods=["POST"])
@@ -1265,13 +1265,12 @@ def api_runway_status():
         with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         jobs = data.get("jobs", [])
-        # 不返回 image_path 的敏感内容给前端（可能包含本地路径）
         safe_jobs = []
         for j in jobs:
             safe_jobs.append({
                 "id": j.get("id"),
                 "prompt": j.get("prompt", ""),
-                "image_path": j.get("image_path", ""),
+                "image_paths": j.get("image_paths", []),
                 "model": j.get("model", "seedance2"),
                 "duration": j.get("duration", 5),
                 "resolution": j.get("resolution", "720p"),
@@ -1292,7 +1291,7 @@ def api_runway_save():
     """保存提示词到 JSON 文件，并重置所有任务状态为 pending"""
     try:
         body = request.get_json() or {}
-        prompts = body.get("prompts", [])  # [{id, prompt, image_path}, ...]
+        prompts = body.get("prompts", [])  # [{id, prompt, image_paths}, ...]
 
         # 加载现有数据
         if RUNWAY_JOBS_PATH.exists():
@@ -1320,7 +1319,7 @@ def api_runway_save():
                         "created_at": None, "completed_at": None,
                     }
                 job["prompt"] = submitted.get("prompt", "")
-                job["image_path"] = submitted.get("image_path", "")
+                job["image_paths"] = submitted.get("image_paths", [])
                 job["model"] = submitted.get("model", DEFAULT_MODEL)
                 job["duration"] = submitted.get("duration", DEFAULT_DURATION)
                 job["resolution"] = submitted.get("resolution", DEFAULT_RESOLUTION)
@@ -1345,7 +1344,7 @@ def api_runway_save():
         # 内容未变化时跳过写入和推送
         if existing_jobs and len(existing_jobs) == len(new_jobs):
             unchanged = True
-            compare_keys = ["prompt", "image_path", "model", "duration", "resolution", "status",
+            compare_keys = ["prompt", "image_paths", "model", "duration", "resolution", "status",
                             "task_id", "result_url", "error", "created_at", "completed_at"]
             for j in new_jobs:
                 old = existing_jobs.get(j["id"], {})
