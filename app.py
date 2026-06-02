@@ -1376,6 +1376,10 @@ def api_runway_save():
 
         _runway_notify_sse("update", {"jobs": new_jobs})
         return jsonify({"status": "ok", "saved": len(new_jobs)})
+    except PermissionError as e:
+        import traceback
+        print(f"[SAVE ERROR] {traceback.format_exc()}")
+        return jsonify({"error": f"权限不足，无法写入任务文件。请运行: sudo chown -R $(whoami) {RUNWAY_JOBS_PATH.parent} && sudo chmod 755 {RUNWAY_JOBS_PATH.parent}"}), 500
     except Exception as e:
         import traceback
         print(f"[SAVE ERROR] {traceback.format_exc()}")

@@ -98,6 +98,12 @@ def load_config(path):
 def save_config(path, cfg):
     """原子写入：先写临时文件，再替换，防止并发脏读"""
     tmp = path.with_suffix(".tmp")
+    # 删除可能存在但权限不对的旧临时文件
+    if tmp.exists():
+        try:
+            tmp.unlink()
+        except PermissionError:
+            pass
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
