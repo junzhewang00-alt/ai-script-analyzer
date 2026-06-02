@@ -38,6 +38,8 @@ MODEL_LABELS = {
     "veo3": "Veo 3",
 }
 
+RUNWAY_SLOTS = 10
+
 DEFAULT_MODEL = "gen4.5"
 DEFAULT_DURATION = 5
 DEFAULT_RESOLUTION = "720p"
@@ -72,8 +74,8 @@ def default_job_template(job_id):
 
 
 def default_jobs():
-    """返回 10 个默认 job 的列表"""
-    return [default_job_template(i) for i in range(1, 11)]
+    """返回 RUNWAY_SLOTS 个默认 job 的列表"""
+    return [default_job_template(i) for i in range(1, RUNWAY_SLOTS + 1)]
 
 
 def load_config(path):

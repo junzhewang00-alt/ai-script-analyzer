@@ -32,7 +32,7 @@ for _rp in _runway_paths:
         break
 from runway_config import (
     get_paths, default_jobs, default_job_template, save_config,
-    DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
+    RUNWAY_SLOTS, DEFAULT_MODEL, DEFAULT_DURATION, DEFAULT_RESOLUTION,
 )
 
 load_dotenv(BASE_DIR / ".env")
@@ -1203,7 +1203,7 @@ RUNWAY_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".t
 @app.route("/runway")
 @login_required
 def runway_page():
-    return render_template("runway.html")
+    return render_template("runway.html", RUNWAY_SLOTS=RUNWAY_SLOTS)
 
 
 @app.route("/api/runway/upload-image", methods=["POST"])
@@ -1294,12 +1294,6 @@ def api_runway_save():
         body = request.get_json() or {}
         prompts = body.get("prompts", [])  # [{id, prompt, image_path}, ...]
 
-        # DEBUG
-        for p in prompts:
-            if p.get("id") in (4, 5) and p.get("prompt", "").strip():
-                print(f"[SAVE DEBUG] Received job {p['id']}: prompt={p['prompt'][:40]!r}")
-        print(f"[SAVE DEBUG] Total prompts received: {len(prompts)}, non-empty: {sum(1 for p in prompts if p.get('prompt','').strip())}")
-
         # 加载现有数据
         if RUNWAY_JOBS_PATH.exists():
             with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
@@ -1311,7 +1305,7 @@ def api_runway_save():
 
         # 更新或创建 jobs，保持共 10 个
         new_jobs = []
-        for i in range(1, 11):
+        for i in range(1, RUNWAY_SLOTS + 1):
             # 找是否在提交的 prompts 中
             submitted = next((p for p in prompts if p.get("id") == i), None)
             if submitted:
@@ -1362,17 +1356,9 @@ def api_runway_save():
                 if not unchanged:
                     break
             if unchanged:
-                print(f"[SAVE DEBUG] Unchanged detected, skipping write")
                 return jsonify({"status": "ok", "saved": len(new_jobs), "unchanged": True})
 
         save_config(RUNWAY_JOBS_PATH, data)
-
-        # DEBUG: verify written
-        with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
-            verify = json.load(f)
-        for j in verify.get("jobs", []):
-            if j["id"] in (4, 5) and j.get("prompt", "").strip():
-                print(f"[SAVE DEBUG] Written job {j['id']}: prompt={j['prompt'][:40]!r}")
 
         _runway_notify_sse("update", {"jobs": new_jobs})
         return jsonify({"status": "ok", "saved": len(new_jobs)})
@@ -1392,10 +1378,11 @@ def runway_clear():
     """清空全部任务，重置为初始状态"""
     try:
         data = {"jobs": default_jobs()}
-        with open(RUNWAY_JOBS_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        save_config(RUNWAY_JOBS_PATH, data)
         _runway_notify_sse("update", {"jobs": data["jobs"]})
         return jsonify({"status": "ok"})
+    except PermissionError:
+        return jsonify({"error": "服务器文件权限错误，无法写入任务文件。"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -260,7 +260,6 @@ function renderJobs(jobs) {
 
     const existingCards = grid.querySelectorAll('.job-card');
     if (existingCards.length !== jobs.length) {
-        console.log('renderJobs: full rebuild, cards=',existingCards.length,'jobs=',jobs.length,'job4=',jobs.find(j=>j.id===4)?.prompt?.slice(0,20));
         grid.innerHTML = buildCardsHTML(jobs);
         updateSummary(jobs); return;
     }
@@ -440,18 +439,19 @@ function removeImage(jobId) { delete uploadedImages[jobId]; markDirty(); loadSta
 // ============ poll ============
 async function loadStatus() {
     if(_polling)return; _polling=true;
-    try { const r=await fetch('/api/runway/status'); const d=await r.json(); if(d.jobs) { console.log('loadStatus: got',d.jobs.length,'jobs, job4=',d.jobs.find(j=>j.id===4)?.prompt?.slice(0,20),'job5=',d.jobs.find(j=>j.id===5)?.prompt?.slice(0,20)); renderJobs(d.jobs); } } catch(e){console.error('loadStatus error:',e);}
+    try { const r=await fetch('/api/runway/status'); const d=await r.json(); if(d.jobs) { renderJobs(d.jobs); } } catch(e){console.error('loadStatus error:',e);}
     _polling=false;
 }
 
 // ============ save ============
-let _dirty=false; function markDirty(){_dirty=true;}
+let _dirty=false, _saving=false; function markDirty(){_dirty=true;}
 async function savePrompts() {
+    if(_saving) return false; _saving=true;
     const btn=document.getElementById('btn-save'); btn.disabled=true; btn.textContent='保存中...';
     const cards=document.querySelectorAll('.job-card');
     const prompts=[];
     if(!cards.length) {
-        for(let i=1;i<=10;i++) prompts.push({id:i,prompt:'',image_path:uploadedImages[i]||'',model:'gen4.5',duration:5,resolution:'720p'});
+        for(let i=1;i<={{ RUNWAY_SLOTS }};i++) prompts.push({id:i,prompt:'',image_path:uploadedImages[i]||'',model:'gen4.5',duration:5,resolution:'720p'});
     } else {
         cards.forEach(card=>{
             try {
@@ -465,16 +465,13 @@ async function savePrompts() {
             } catch(e){ console.error('savePrompts card read error:',e); }
         });
     }
-    console.log('savePrompts: collected',prompts.length,'prompts');
     try {
-        console.log('savePrompts: sending',prompts.length,'prompts, job4=',prompts.find(p=>p.id===4)?.prompt?.slice(0,20),'job5=',prompts.find(p=>p.id===5)?.prompt?.slice(0,20));
         const resp=await fetch('/api/runway/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts})});
         const data=await resp.json();
-        console.log('savePrompts: response',data);
-        if(data.status==='ok'){showToast('已保存 '+data.saved+' 个任务到队列','success');_dirty=false;await loadStatus();btn.disabled=false;btn.textContent='保存到队列';return true;}
+        if(data.status==='ok'){showToast('已保存 '+data.saved+' 个任务到队列','success');_dirty=false;await loadStatus();btn.disabled=false;btn.textContent='保存到队列';_saving=false;return true;}
         else showToast(data.error||'保存失败','error');
     } catch(e){console.error('savePrompts error:',e);showToast('网络错误，请检查服务器是否运行','error');}
-    btn.disabled=false; btn.textContent='保存到队列'; return false;
+    btn.disabled=false; btn.textContent='保存到队列'; _saving=false; return false;
 }
 
 async function clearAll(){
