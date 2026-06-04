@@ -3178,9 +3178,6 @@ html.light-theme ::-webkit-scrollbar-thumb {
     .pay-card-modal { width: 90vw; max-width: 420px; }
 
     /* prompts */
-    .ops-workspaces { flex-direction: column; }
-    .ops-workspace { min-width: auto; }
-    .ops-panel { width: 100vw; max-width: 100vw; }
     .ps-studio { flex-direction: column; }
 
     /* landing */
@@ -3616,19 +3613,6 @@ select:focus {
     .pay-qrcode-card {
         width: 90vw;
         max-width: 400px;
-    }
-
-    .ops-workspaces {
-        flex-direction: column;
-    }
-
-    .ops-workspace {
-        min-width: auto;
-    }
-
-    .ops-panel {
-        width: 100vw;
-        max-width: 100vw;
     }
 
     .ps-studio {

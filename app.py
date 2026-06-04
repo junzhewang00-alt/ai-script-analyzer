@@ -1340,7 +1340,9 @@ def serve_runway_image(filename):
     from flask import send_from_directory
     if (RUNWAY_UPLOAD_DIR / filename).exists():
         return send_from_directory(str(RUNWAY_UPLOAD_DIR), filename)
-    return send_from_directory(str(LEGACY_RUNWAY_UPLOAD_DIR), filename)
+    if (LEGACY_RUNWAY_UPLOAD_DIR / filename).exists():
+        return send_from_directory(str(LEGACY_RUNWAY_UPLOAD_DIR), filename)
+    return jsonify({"error": "图片不存在或已过期"}), 404
 
 
 _status_cache = {"data": None, "ts": 0}
@@ -1511,7 +1513,21 @@ def runway_clear():
 RUNWAY_LOCK = threading.Lock()
 RUNWAY_SSE_LOCK = threading.Lock()
 RUNWAY_RUNNING = False
-RUNWAY_SCRIPT_DIR = Path.home() / "Desktop" / "runway-bot"
+_RUNWAY_SCRIPT_CANDIDATES = [
+    BASE_DIR / "runway-bot",
+    Path.home() / "Desktop" / "runway-bot",
+    Path.home() / "runway-bot",
+]
+
+
+def _get_runway_script_dir() -> Path:
+    for p in _RUNWAY_SCRIPT_CANDIDATES:
+        if (p / "runway_api.py").exists() or (p / "runway_browser.py").exists():
+            return p
+    return _RUNWAY_SCRIPT_CANDIDATES[0]  # 返回第一个作为默认
+
+
+RUNWAY_SCRIPT_DIR = _get_runway_script_dir()
 
 # SSE 客户端列表（用于实时推送状态更新）
 RUNWAY_SSE_CLIENTS: list = []
