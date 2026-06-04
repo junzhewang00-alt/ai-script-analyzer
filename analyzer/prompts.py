@@ -1,3 +1,4 @@
+from __future__ import annotations
 """OPS-optimized prompts — structured, weighted, constrained."""
 
 # ═══════════════════════════════════════════════════════════
