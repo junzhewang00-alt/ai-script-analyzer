@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,9 +13,9 @@ FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
 class VideoAnalyzer:
     """视频技术质量分析器 — 模糊 / 卡顿 / 音画同步"""
 
-    UPLOAD_FOLDER = BASE_DIR / "uploads" / "videos"
-    AUDIO_FOLDER = BASE_DIR / "uploads" / "audio"
-    TEMP_FOLDER = Path(tempfile.gettempdir()) / "ai_review_tmp"
+    UPLOAD_FOLDER = BASE_DIR / "storage" / "review" / "videos"
+    AUDIO_FOLDER = BASE_DIR / "cache" / "review" / "audio"
+    TEMP_FOLDER = BASE_DIR / "cache" / "review" / "frames"
 
     def __init__(self):
         self.UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -77,7 +76,6 @@ class VideoAnalyzer:
 
         try:
             import cv2
-            import numpy as np
         except ImportError:
             return {"blur_score": 0.0, "blurry_frames": [],
                     "is_acceptable": True, "_error": "opencv-python not installed"}

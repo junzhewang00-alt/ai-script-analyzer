@@ -1,4 +1,4 @@
-﻿import stripe
+import stripe
 
 
 def create_payment_intent(amount_yuan: int, order_id: str, user_id: int) -> stripe.PaymentIntent:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import markdown
 import bleach
-from flask import Flask, render_template, request, session, jsonify, redirect, url_for, flash, send_file, Response
+from flask import Flask, render_template, request, session, jsonify, redirect, url_for, send_file, Response
 from flask_login import LoginManager, login_required, current_user
 from dotenv import load_dotenv
 
@@ -23,8 +23,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # 导入 Runway 共享配置
 _runway_paths = [
-    Path("C:/Users/ZhuanZ/Desktop/runway-bot"),  # Windows dev
-    BASE_DIR,  # 项目内（Linux 服务器）
+    BASE_DIR,  # 项目内（优先使用）
+    Path("C:/Users/ZhuanZ/Desktop/runway-bot"),  # Windows dev 备选
 ]
 for _rp in _runway_paths:
     if (_rp / "runway_config.py").exists():
@@ -81,9 +81,23 @@ UPLOAD_FOLDER = tempfile.gettempdir()
 JOBS_DIR = BASE_DIR / ".jobs"
 JOBS_DIR.mkdir(exist_ok=True)
 
+STORAGE_DIR = BASE_DIR / "storage"
+CACHE_DIR = BASE_DIR / "cache"
+REVIEW_VIDEO_FOLDER = STORAGE_DIR / "review" / "videos"
+REVIEW_AUDIO_FOLDER = CACHE_DIR / "review" / "audio"
+RUNWAY_UPLOAD_DIR = STORAGE_DIR / "runway" / "images"
+LEGACY_REVIEW_VIDEO_FOLDER = BASE_DIR / "uploads" / "videos"
+LEGACY_REVIEW_AUDIO_FOLDER = BASE_DIR / "uploads" / "audio"
+LEGACY_RUNWAY_UPLOAD_DIR = BASE_DIR / "uploads" / "runway"
+CLEANUP_TTL_SECONDS = 7 * 24 * 3600
+CLEANUP_INTERVAL_SECONDS = 6 * 3600
+
+for _dir in (REVIEW_VIDEO_FOLDER, REVIEW_AUDIO_FOLDER, RUNWAY_UPLOAD_DIR):
+    _dir.mkdir(parents=True, exist_ok=True)
+
 # 服务端 API 配置存储 (key=sid, 不在 cookie 中传密钥)
 _api_configs: dict = {}
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 
 class JobStore:
@@ -148,6 +162,27 @@ class JobStore:
 _jobs_store = JobStore()
 
 
+def _get_job_or_404(job_id: str):
+    """取任务 + 校验当前用户归属，不通过则返回 (None, error_response)。"""
+    job = _jobs_store.get(job_id)
+    if job is None:
+        return None, (jsonify({"error": "任务不存在或已过期"}), 404)
+    if job.get("user_id") != current_user.id:
+        return None, (jsonify({"error": "无权访问该任务"}), 403)
+    return job, None
+
+
+def _render_job_status(job: dict):
+    return {
+        "results": job["results"],
+        "is_demo": job["is_demo"],
+        "total": job["total"],
+        "script_preview": job.get("script_preview", ""),
+        "char_count": job.get("char_count", 0),
+        "overview": job.get("overview"),
+    }
+
+
 JOB_TTL_SECONDS = 24 * 3600  # 24 小时后自动清理
 LOG_FILE = BASE_DIR / "server.log"
 
@@ -176,8 +211,9 @@ def _job_path(job_id: str) -> Path:
     return JOBS_DIR / f"{job_id}.json"
 
 
-def _save_job(job_id: str):
-    job = _jobs_store.get(job_id)
+def _save_job(job_id: str, job: dict = None):
+    if job is None:
+        job = _jobs_store.get(job_id)
     if job is None:
         return
     data = {
@@ -235,8 +271,72 @@ def _cleanup_stale_jobs():
         _job_path(jid).unlink(missing_ok=True)
 
 
+def _cleanup_old_files(root: Path, ttl_seconds: int) -> int:
+    """删除目录下超过 TTL 的文件，并尽量移除空目录。"""
+    if not root.exists():
+        return 0
+
+    now = time.time()
+    deleted = 0
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            age = now - path.stat().st_mtime
+            if age > ttl_seconds:
+                path.unlink(missing_ok=True)
+                deleted += 1
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            _log(f"[cleanup] failed to delete file {path}: {e}")
+
+    for path in sorted((p for p in root.rglob("*") if p.is_dir()), reverse=True):
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+    return deleted
+
+
+def _cleanup_expired_uploads():
+    """定期清理上传素材与中间文件，保留最近 7 天的数据。"""
+    managed_dirs = (
+        REVIEW_VIDEO_FOLDER,
+        REVIEW_AUDIO_FOLDER,
+        RUNWAY_UPLOAD_DIR,
+        LEGACY_REVIEW_VIDEO_FOLDER,
+        LEGACY_REVIEW_AUDIO_FOLDER,
+        LEGACY_RUNWAY_UPLOAD_DIR,
+    )
+    deleted = 0
+    for folder in managed_dirs:
+        deleted += _cleanup_old_files(folder, CLEANUP_TTL_SECONDS)
+    if deleted:
+        _log(f"[cleanup] deleted {deleted} expired uploaded files")
+
+
+def _start_cleanup_worker():
+    """后台定时清理任务文件与上传目录。"""
+
+    def _worker():
+        while True:
+            try:
+                _cleanup_stale_jobs()
+                _cleanup_expired_uploads()
+            except Exception as e:
+                _log(f"[cleanup] worker error: {e}")
+            time.sleep(CLEANUP_INTERVAL_SECONDS)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 # 启动时加载历史任务
 _load_jobs()
+_cleanup_stale_jobs()
+_cleanup_expired_uploads()
+_start_cleanup_worker()
 
 
 @app.route("/")
@@ -311,8 +411,7 @@ def analyze():
 @app.route("/analyze/<job_id>")
 @login_required
 def manual_analyze(job_id):
-    job = _jobs_store.get(job_id)
-
+    job, err = _get_job_or_404(job_id)
     if job is None:
         return render_template("index.html", error="任务不存在或已过期，请重新提交剧本")
 
@@ -329,19 +428,10 @@ def manual_analyze(job_id):
 @app.route("/api/job/<job_id>")
 @login_required
 def job_status(job_id):
-    job = _jobs_store.get(job_id)
-
+    job, err = _get_job_or_404(job_id)
     if job is None:
-        return jsonify({"error": "任务不存在或已过期"}), 404
-
-    return jsonify({
-        "results": job["results"],
-        "is_demo": job["is_demo"],
-        "total": job["total"],
-        "script_preview": job.get("script_preview", ""),
-        "char_count": job.get("char_count", 0),
-        "overview": job.get("overview"),
-    })
+        return err
+    return jsonify(_render_job_status(job))
 
 
 def _mask_key(key: str) -> str:
@@ -395,13 +485,11 @@ def api_config_save():
 @login_required
 @rate_limit(30, 60)
 def run_single_dimension(job_id, index):
-    # 单个维度积分检查
     if current_user.credits < CREDIT_COST["single_dimension"]:
         return jsonify({"error": f"积分不足，单个维度分析需要 {CREDIT_COST['single_dimension']} 积分"}), 402
-    job = _jobs_store.get(job_id)
-
+    job, err = _get_job_or_404(job_id)
     if job is None:
-        return jsonify({"error": "任务不存在"}), 404
+        return err
 
     if index < 0 or index >= len(job["tasks"]):
         return jsonify({"error": "无效的分析维度"}), 400
@@ -506,10 +594,9 @@ def run_single_dimension(job_id, index):
 @app.route("/api/job/<job_id>/cancel/<int:index>", methods=["POST"])
 @login_required
 def cancel_dimension(job_id, index):
-    job = _jobs_store.get(job_id)
-
+    job, err = _get_job_or_404(job_id)
     if job is None:
-        return jsonify({"error": "任务不存在"}), 404
+        return err
 
     if index < 0 or index >= len(job["results"]):
         return jsonify({"error": "无效的分析维度"}), 400
@@ -535,11 +622,9 @@ def cancel_dimension(job_id, index):
 def run_overview(job_id):
     if current_user.credits < CREDIT_COST["overview"]:
         return jsonify({"error": f"积分不足，概览生成需要 {CREDIT_COST['overview']} 积分"}), 402
-
-    job = _jobs_store.get(job_id)
-
+    job, err = _get_job_or_404(job_id)
     if job is None:
-        return jsonify({"error": "任务不存在"}), 404
+        return err
 
     done_results = [r for r in job["results"] if r["status"] == "done"]
     if len(done_results) < 3:
@@ -885,11 +970,6 @@ def api_chat():
         return jsonify({"reply": "AI 助手暂不可用，请稍后再试。"})
 
 
-REVIEW_VIDEO_FOLDER = BASE_DIR / "uploads" / "videos"
-REVIEW_AUDIO_FOLDER = BASE_DIR / "uploads" / "audio"
-REVIEW_VIDEO_FOLDER.mkdir(parents=True, exist_ok=True)
-REVIEW_AUDIO_FOLDER.mkdir(parents=True, exist_ok=True)
-
 # 审核任务存储
 _review_lock = threading.Lock()
 _review_jobs: dict = {}
@@ -918,8 +998,6 @@ def api_create_review():
 
     if not video_file or not video_file.filename:
         return jsonify({"error": "请上传视频文件"}), 400
-
-    import uuid, os
 
     # 保存视频
     ext = os.path.splitext(video_file.filename)[1] or ".mp4"
@@ -962,11 +1040,12 @@ def api_create_review():
         from reviewer.orchestrator import ReviewOrchestrator
         _log(f"[review job={job_id}] Thread started")
         orchestrator = ReviewOrchestrator()
+        result = None
         try:
             with app.app_context():
-                job = db.session.get(ReviewJob, job_id)
-                if job:
-                    job.status = "running"
+                db_job = db.session.get(ReviewJob, job_id)
+                if db_job:
+                    db_job.status = "running"
                     db.session.commit()
                 _log(f"[review job={job_id}] Running pipeline")
 
@@ -978,14 +1057,21 @@ def api_create_review():
                     flask_app=app,
                 )
                 _log(f"[review job={job_id}] Pipeline done: success={result.get('success')}")
+
+                if cancel_event.is_set():
+                    db_job = db.session.get(ReviewJob, job_id)
+                    if db_job and db_job.status == "running":
+                        db_job.status = "cancelled"
+                        db.session.commit()
+                        _log(f"[review job={job_id}] marked cancelled (thread safety net)")
         except Exception as e:
             _log(f"[review job={job_id}] ERROR: {e}")
             import traceback
             _log(f"[review job={job_id}] Traceback: {traceback.format_exc()}")
             with app.app_context():
-                job = db.session.get(ReviewJob, job_id)
-                if job:
-                    job.status = "failed"
+                db_job = db.session.get(ReviewJob, job_id)
+                if db_job:
+                    db_job.status = "failed"
                     db.session.commit()
         finally:
             with _review_lock:
@@ -1111,6 +1197,8 @@ def api_cancel_review(job_id):
         cancel_event = _review_cancel_events.get(job_id)
     if cancel_event and not cancel_event.is_set():
         cancel_event.set()
+        job.status = "cancelled"
+        db.session.commit()
         return jsonify({"status": "cancelling"})
     return jsonify({"error": "任务不在运行中或已结束"}), 400
 
@@ -1193,8 +1281,6 @@ def api_run_dimension(job_id, dimension):
 RUNWAY_MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
 RUNWAY_JOBS_PATH = get_paths()["config"]
-RUNWAY_UPLOAD_DIR = BASE_DIR / "uploads" / "runway"
-RUNWAY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 支持的图片格式
 RUNWAY_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".tif", ".heic", ".heif"}
@@ -1252,7 +1338,9 @@ def api_runway_upload_image():
 def serve_runway_image(filename):
     """提供上传的参考图预览"""
     from flask import send_from_directory
-    return send_from_directory(str(RUNWAY_UPLOAD_DIR), filename)
+    if (RUNWAY_UPLOAD_DIR / filename).exists():
+        return send_from_directory(str(RUNWAY_UPLOAD_DIR), filename)
+    return send_from_directory(str(LEGACY_RUNWAY_UPLOAD_DIR), filename)
 
 
 _status_cache = {"data": None, "ts": 0}
@@ -1386,9 +1474,30 @@ def api_runway_save():
 @app.route("/api/runway/clear", methods=["POST"])
 @login_required
 def runway_clear():
-    """清空全部任务，重置为初始状态"""
+    """清空全部任务，保留模型/分辨率/时长设置"""
     try:
-        data = {"jobs": default_jobs()}
+        # 从现有配置中读取用户设置（轻量读取，避免 load_config 的副作用开销）
+        preserved = {"model": DEFAULT_MODEL, "duration": DEFAULT_DURATION, "resolution": DEFAULT_RESOLUTION}
+        if RUNWAY_JOBS_PATH.exists():
+            try:
+                with open(RUNWAY_JOBS_PATH, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                jobs = cfg.get("jobs", [])
+                if jobs:
+                    j0 = jobs[0]
+                    preserved = {
+                        "model": j0.get("model", DEFAULT_MODEL),
+                        "duration": j0.get("duration", DEFAULT_DURATION),
+                        "resolution": j0.get("resolution", DEFAULT_RESOLUTION),
+                    }
+            except (json.JSONDecodeError, OSError):
+                pass  # 文件损坏时降级为默认值
+
+        jobs = default_jobs()
+        for j in jobs:
+            j.update(preserved)
+
+        data = {"jobs": jobs}
         save_config(RUNWAY_JOBS_PATH, data)
         _status_cache["data"] = None
         _runway_notify_sse("update", {"jobs": data["jobs"]})
@@ -1402,7 +1511,7 @@ def runway_clear():
 RUNWAY_LOCK = threading.Lock()
 RUNWAY_SSE_LOCK = threading.Lock()
 RUNWAY_RUNNING = False
-RUNWAY_SCRIPT_DIR = RUNWAY_JOBS_PATH.parent
+RUNWAY_SCRIPT_DIR = Path.home() / "Desktop" / "runway-bot"
 
 # SSE 客户端列表（用于实时推送状态更新）
 RUNWAY_SSE_CLIENTS: list = []
@@ -1497,13 +1606,14 @@ def runway_trigger():
         global RUNWAY_RUNNING
         mode = "API" if use_api else "浏览器"
         script = "runway_api.py" if use_api else "runway_browser.py"
+        data_dir = str(RUNWAY_JOBS_PATH.parent)
         try:
             result = subprocess.run(
                 [sys.executable, script],
                 cwd=str(RUNWAY_SCRIPT_DIR),
                 capture_output=True, text=True,
                 timeout=600,
-                env={**os.environ, "RUNWAYML_API_SECRET": api_key},
+                env={**os.environ, "RUNWAYML_API_SECRET": api_key, "RUNWAY_DATA_DIR": data_dir},
             )
             print(f"[Runway Trigger {mode}] exit={result.returncode}")
             if result.stdout:
@@ -1532,8 +1642,6 @@ def runway_trigger():
 
 
 if __name__ == "__main__":
-    import sys
-
     with app.app_context():
         db.create_all()
 
@@ -1546,6 +1654,6 @@ if __name__ == "__main__":
         from waitress import serve
         port = int(os.getenv("PORT", 5000))
         print(f"  生产模式 (waitress) → http://0.0.0.0:{port}")
-        serve(app, host="0.0.0.0", port=port)
+        serve(app, host="0.0.0.0", port=port, threads=16)
     else:
         app.run(host="127.0.0.1", debug=True, threaded=True)

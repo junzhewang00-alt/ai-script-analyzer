@@ -66,7 +66,26 @@
     /* 结果卡片 */
     .results-section { display: none; margin-top: 40px; }
     .results-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px; }
-    @media (max-width: 768px) { .results-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) {
+        .results-grid { grid-template-columns: 1fr; }
+        .review-container { margin-top: 60px; padding: 0 14px; }
+        .review-hero h1 { font-size: 1.5rem; }
+        .upload-zone { padding: 32px 16px; }
+        .upload-zone .icon { font-size: 2.2rem; }
+        .summary-card { padding: 20px; }
+        .summary-header { flex-direction: column; text-align: center; }
+        .diff-table { font-size: 0.72rem; }
+        .diff-table th, .diff-table td { padding: 4px 6px; }
+    }
+    @media (max-width: 480px) {
+        .review-container { margin-top: 50px; padding: 0 10px; }
+        .review-hero h1 { font-size: 1.25rem; }
+        .review-hero p { font-size: 0.82rem; }
+        .upload-zone { padding: 24px 12px; }
+        .btn-review { padding: 12px; font-size: 0.9rem; }
+        .history-item { flex-wrap: wrap; gap: 4px; font-size: 0.75rem; }
+        .history-item .hi-name { flex: 1 1 100%; }
+    }
 
     .result-card {
         background: rgba(15, 15, 25, 0.8); border: 1px solid #1e293b;

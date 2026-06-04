@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import urllib.parse
 import urllib.request
 import json

@@ -1,7 +1,5 @@
 """OPS-optimized prompts — structured, weighted, constrained."""
 
-from __future__ import annotations
-
 # ═══════════════════════════════════════════════════════════
 # 系统角色 — OPS 权重分层：人设 > 输出格式 > 语气 > 禁止项
 # ═══════════════════════════════════════════════════════════

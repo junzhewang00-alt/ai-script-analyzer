@@ -7,3 +7,4 @@
 - 本项目技术栈：Flask + Jinja2 + 原生 JS/CSS + SQLite。不要引入 React/Tailwind。
 - AI 后端唯一：DeepSeek v4-pro。
 - 不要修改 ~/.claude/settings.json 或任何 CLI 工具配置文件。
+- Harness Engineering 工作流已启用。开发时遵循 Orchestrator → Builder → QA 循环，参考 docs/skills/ 和 harness/prompts/。

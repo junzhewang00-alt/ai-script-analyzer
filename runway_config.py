@@ -47,16 +47,36 @@ DEFAULT_RESOLUTION = "720p"
 
 
 def get_paths():
-    """返回数据存储目录下所有路径（跨平台）"""
-    # 优先用项目目录下的 data/，其次用 Desktop/runway-bot
-    project_data = Path(__file__).resolve().parent / "data"
-    if project_data.exists():
-        profile_dir = project_data
+    """返回数据存储目录下所有路径（跨平台）。
+
+    数据目录优先级：
+    1. RUNWAY_DATA_DIR 环境变量（统一 Web 和子进程的数据路径）
+    2. 项目目录下的 data/（默认）
+
+    首次运行时从旧 Desktop/runway-bot 路径自动迁移数据。
+    """
+    env_dir = os.environ.get("RUNWAY_DATA_DIR", "").strip()
+    if env_dir:
+        profile_dir = Path(env_dir)
     else:
-        profile_dir = Path.home() / "Desktop" / "runway-bot"
+        profile_dir = Path(__file__).resolve().parent / "data"
     profile_dir.mkdir(parents=True, exist_ok=True)
+
+    new_config = profile_dir / "jobs.json"
+
+    # 自动迁移旧数据：Desktop/runway-bot → data/
+    if not env_dir:
+        old_dir = Path.home() / "Desktop" / "runway-bot"
+        old_config = old_dir / "jobs.json"
+        if old_config.exists() and not new_config.exists():
+            import shutil
+            shutil.copy2(old_config, new_config)
+            old_state = old_dir / "state.json"
+            if old_state.exists():
+                shutil.copy2(old_state, profile_dir / "state.json")
+
     return {
-        "config": profile_dir / "jobs.json",
+        "config": new_config,
         "state": profile_dir / "state.json",
         "chrome_profile": profile_dir / "chrome_data",
     }

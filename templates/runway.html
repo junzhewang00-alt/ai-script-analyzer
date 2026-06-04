@@ -81,13 +81,41 @@
     .model-warn { font-size: 0.65rem; color: #f59e0b; margin-top: 2px; }
 
     /* batch toolbar */
-    .batch-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; flex-wrap: wrap; }
+    .batch-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 0 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; flex-wrap: wrap; overflow: hidden; max-height: 0; border-width: 0; margin-bottom: 0; transition: max-height 0.35s ease, padding 0.35s ease, margin-bottom 0.35s ease, border-width 0.35s ease; }
+    .batch-toolbar.open { max-height: 200px; padding: 10px 14px; margin-bottom: 14px; border-width: 1px; }
     .batch-toolbar .batch-label { font-size: 0.72rem; color: #777; white-space: nowrap; }
     .batch-toolbar select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 6px; color: #e0e0e0; font-size: 0.72rem; cursor: pointer; }
     .batch-toolbar select option { background: #1a1a2e; color: #e0e0e0; }
     .batch-toolbar select:focus { outline: none; border-color: rgba(96,165,250,0.4); }
     .batch-apply-btn { padding: 5px 14px; background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.25); border-radius: 6px; color: #60a5fa; font-size: 0.75rem; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
     .batch-apply-btn:hover { background: rgba(96,165,250,0.2); border-color: rgba(96,165,250,0.4); }
+
+    .btn-toggle-batch { display: inline-flex; align-items: center; gap: 5px; padding: 10px 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #ccc; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
+    .btn-toggle-batch:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+    .btn-toggle-batch .arrow { display: inline-block; transition: transform 0.3s ease; font-size: 0.65rem; }
+    .btn-toggle-batch.open .arrow { transform: rotate(180deg); }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+        .runway-grid { grid-template-columns: 1fr 1fr; }
+        .runway-container { padding: 16px 14px; }
+    }
+    @media (max-width: 640px) {
+        .runway-grid { grid-template-columns: 1fr; }
+        .runway-header { flex-direction: column; align-items: flex-start; }
+        .runway-header .subtitle { font-size: 0.72rem; }
+        .batch-toolbar { flex-direction: column; align-items: flex-start; }
+        .batch-toolbar select { width: 100%; }
+        .params-row { flex-direction: column; }
+        .params-row select { width: 100%; }
+        .image-upload-grid { flex-wrap: wrap; }
+    }
+    @media (max-width: 480px) {
+        .runway-container { padding: 12px 8px; }
+        .runway-header h1 { font-size: 1.2rem; }
+        .job-card { padding: 12px; }
+        .job-card textarea { font-size: 0.78rem; }
+    }
 </style>
 {% endblock %}
 
@@ -99,6 +127,7 @@
             <div class="subtitle">网页自动提交 · 不消耗积分 · 每 10 分钟 2 个任务</div>
         </div>
         <div style="display:flex;gap:8px;">
+            <button class="btn-toggle-batch" id="btn-toggle-batch" onclick="toggleBatch()">⚙ 批量设置 <span class="arrow">▾</span></button>
             <button class="btn-save" id="btn-save" onclick="savePrompts()">保存到队列</button>
             <button class="btn-trigger" id="btn-trigger" onclick="triggerSubmit()">立即提交</button>
             <button class="btn-clear" onclick="clearAll()" title="清空所有提示词和状态">清空列表</button>
@@ -113,7 +142,7 @@
         <div class="info-stats" id="summary-inline"></div>
     </div>
 
-    <div class="batch-toolbar" id="batch-toolbar" style="display:none">
+    <div class="batch-toolbar" id="batch-toolbar">
         <span class="batch-label">批量设置:</span>
         <select id="batch-model" onchange="onBatchModelChange()">
             <option value="seedance2">Seedance 2.0</option>
@@ -331,10 +360,9 @@ function renderJobs(jobs, force) {
             '<div style="font-size:0.78rem;color:#666;margin-bottom:18px;">在下方填写提示词后点击「保存到队列」，或点击下方按钮初始化 10 个空槽位</div>'+
             '<button onclick="savePrompts()" style="padding:8px 20px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:7px;color:#60a5fa;font-size:0.82rem;cursor:pointer;">初始化任务槽位</button>'+
             '</div>';
-        if(toolbar) toolbar.style.display = 'none';
+        if(toolbar) toolbar.classList.remove('open');
         updateSummary(jobs); return;
     }
-    if(toolbar) toolbar.style.display = '';
     jobs.forEach(j => { if (j.image_paths && j.image_paths.length && !uploadedImages[j.id]) uploadedImages[j.id] = j.image_paths; });
 
     const existingCards = grid.querySelectorAll('.job-card');
@@ -586,6 +614,13 @@ async function clearAll(){
         if(data.status==='ok'){showToast('已清空','success');setTimeout(()=>location.reload(),800);}
         else showToast(data.error||'清空失败','error');
     } catch(e){showToast('网络错误','error');}
+}
+
+function toggleBatch(){
+    const toolbar = document.getElementById('batch-toolbar');
+    const btn = document.getElementById('btn-toggle-batch');
+    const isOpen = toolbar.classList.toggle('open');
+    if (btn) btn.classList.toggle('open', isOpen);
 }
 
 async function triggerSubmit(){

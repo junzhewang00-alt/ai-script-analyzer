@@ -1,7 +1,6 @@
 """DeepSeek 分析桥接 — 台词比对 + 汇总评审（替代 Claude Code）"""
 
 import json
-import os
 import re
 
 from analyzer.llm import call_llm

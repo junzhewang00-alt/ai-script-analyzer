@@ -12,8 +12,6 @@
 from __future__ import annotations
 
 import json
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from reviewer.video import VideoAnalyzer
 from reviewer.asr import ASRProcessor
@@ -168,10 +166,3 @@ class ReviewOrchestrator:
             "summary": summary,
             "errors": errors if errors else None,
         }
-
-    def _update_status(self, job, status: str, db):
-        """更新 ReviewJob 状态"""
-        from datetime import datetime, timezone
-        job.status = status
-        job.updated_at = datetime.now(timezone.utc)
-        db.commit()

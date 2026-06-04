@@ -151,6 +151,39 @@
     <script>
     // ── Chat context (overridden by pages) ──
     window.__chatContext = window.__chatContext || {};
+
+    // ── Stagger card entry animations ──
+    (function() {
+        var staggerTargets = document.querySelectorAll(
+            ".dim-card, .result-card, .dash-kpi-card, .dash-chart-card, .job-card, .recharge-card, .ps-box-group"
+        );
+        staggerTargets.forEach(function(el, i) {
+            el.classList.add("stagger-in", "delay-" + (Math.min(i + 1, 10)));
+        });
+    })();
+
+    // ── Scroll-reveal fallback (Intersection Observer) ──
+    (function() {
+        if (CSS.supports("animation-timeline", "view()")) return; // browser supports native
+
+        var revealed = new Set();
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting && !revealed.has(entry.target)) {
+                    revealed.add(entry.target);
+                    entry.target.style.opacity = "1";
+                    entry.target.style.transform = "translateY(0)";
+                }
+            });
+        }, { threshold: 0.15 });
+
+        document.querySelectorAll(".scroll-reveal").forEach(function(el) {
+            el.style.opacity = "0";
+            el.style.transform = "translateY(30px)";
+            el.style.transition = "opacity 0.5s ease, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)";
+            observer.observe(el);
+        });
+    })();
     </script>
     <script>
     // Toast helper
